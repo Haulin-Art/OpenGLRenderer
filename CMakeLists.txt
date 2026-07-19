@@ -4,10 +4,19 @@ cmake_minimum_required(VERSION 3.16)
 # 配置程序名称，以及当前版本号，语言为C++
 project(OpenGLRenderer VERSION 1.0.0 LANGUAGES C CXX)
 
+# 查看系统当中的 OpenGL 库
 find_package(OpenGL REQUIRED)
 
 # 在这里配置文件
-add_executable(OpenGLRenderer src/config.h src/main.cpp dependencies/glad/src/glad.c)
+add_executable(OpenGLRenderer
+    src/config.h
+    src/main.cpp
+    )
+
+# 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
+target_compile_definitions(OpenGLRenderer PRIVATE
+    PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 
 # ============================================
 # 第三方库 1: GLAD — OpenGL 函数加载器

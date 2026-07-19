@@ -3,6 +3,27 @@
 int main(){
     //std::cout << "Hello OpenGL!" << std::endl;
     
+    // 读取 shader 文件（使用 CMake 传入的绝对路径）
+    std::ifstream file;
+    std::string line;
+
+    // PROJECT_SOURCE_DIR 由 CMake 定义为项目根目录的绝对路径
+    std::string shaderPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicvertex.glsl";
+    file.open(shaderPath);
+
+    if (!file.is_open()) {
+        std::cout << "Failed to open shader: " << shaderPath << std::endl;
+        return -1;
+    }
+
+    while (std::getline(file, line)) {
+        std::cout << line << std::endl;
+    }
+    file.close();
+
+    std::cout << "------------------------" << std::endl;
+
+
     GLFWwindow* window;
     if (!glfwInit()) {
         std::cout << "Failed to initialize GLFW" << std::endl;
