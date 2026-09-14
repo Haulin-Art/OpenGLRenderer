@@ -11,6 +11,10 @@ find_package(OpenGL REQUIRED)
 add_executable(OpenGLRenderer
     src/config.h
     src/main.cpp
+    src/Mesh.h
+    src/Mesh.cpp
+    src/Shader.h
+    src/Shader.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件

@@ -1,0 +1,2 @@
+- Communicates in Chinese and asks questions in Chinese; prefers responses in Chinese. Confidence: 0.7
+- Prefers to make code changes himself: wants step-by-step instructions to follow manually rather than having the agent edit files directly. Confidence: 0.9
