@@ -9,6 +9,9 @@
 #include <sstream> // 字符串流， 用于将文件内容读入字符串
 #include <string>  // 字符串类
 
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>   // glm::value_ptr，传给 glUniformMatrix4fv 用
+
 class Shader
 {
     public:
@@ -17,6 +20,12 @@ class Shader
         Shader(const std::string& vertexPath, const std::string& fragmentPath);
         // 析构函数
         ~Shader();
+
+        // 设置MVP矩阵Uniform
+        void SetMatrix(const glm::mat4& ModeMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix);
+
+        // 设置灯光Uniform
+        void SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor);
 
     private:
         const std::string mVertexPath;   // 顶点着色器文件路径

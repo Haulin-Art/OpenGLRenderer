@@ -67,3 +67,8 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# 第三方预编译库：上面的 *.a / *.lib 会误伤随仓库分发的第三方静态库
+# 这里对 GLFW 的预编译库目录放行，保证换台电脑 clone 后仍能编译
+!dependencies/glfw/lib-*/
+!dependencies/glfw/lib-*/**

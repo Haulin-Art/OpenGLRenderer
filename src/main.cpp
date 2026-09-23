@@ -54,7 +54,6 @@ int main(){
 
     
 
-
     // ---------------------------------------------------------------
     // 【第 2 步】初始化 GLFW
     //
@@ -109,19 +108,14 @@ int main(){
         return -1;
     }
 
-    // 所有 OpenGL 调用必须在 GLAD 加载之后！
-    // 设置清屏颜色（RGBA，取值范围 0.0~1.0）。
-    // 这里是一种青绿色: R=0.2 G=0.3 B=0.3 A=1.0
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f); // 设置清屏颜色
 
-
-    // Shader
+    // ======================================== Shader ======================================================
     std::string vsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicvertex.glsl";
     std::string fsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicfrag.glsl";
     Shader shader(vsPath, fsPath);
 
 
-    // 网格
+    // ======================================== 网格 ======================================================
     //   坐标是 NDC（标准化设备坐标），范围 -1~1，屏幕中心是原点，所以这三个点正好围成居中的三角形。片段着色器
     // vec4(vertexColor,1.0) 会把三个角的颜色插值，你会看到一个红绿蓝渐变的三角形。
     float vertices[] = {
@@ -130,27 +124,49 @@ int main(){
         -0.5f, -0.5f, 0.0f,        0.0f, 1.0f, 0.0f,   // 左下    -> 绿
          0.5f, -0.5f, 0.0f,        0.0f, 0.0f, 1.0f,   // 右下    -> 蓝
     };
-    // - VBO 存的是"数据本身"（那一堆 float）。
-    // - VAO 存的是"数据怎么取"——属性位置、类型、步长、偏移。Core Profile 下没有 VAO 就没法画。
-    // - glVertexAttribPointer 的第 5 个参数 stride = 6*sizeof(float)，表示"每跨 6 个 float 是一个新顶点"；最后一个参数是偏移：位置从 0 开始，颜色从第 3 个 float 开始。
-    unsigned int VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    // 索引
+    unsigned int indices[] ={
+        0,1,2
+    };
 
-    glBindVertexArray(VAO);                      // 下面配置的属性都记进 VAO
+    // ======================================== 加载 OBJ 模型 ======================================================
+    // 从文件读取模型，替换掉之前硬编码的顶点数组。
+    // LoadObj 内部会做"顶点展开"，输出 GPU 直接可用的交错格式:
+    //   每顶点 8 个 float = 位置(3) + 法线(3) + UV(2)
+    ObjMeshData objMeshData;
+    const std::string objPath = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/monkey.obj";
+    if (!LoadObj(objPath, objMeshData)) {
+        std::cerr << "加载 OBJ 失败: " << objPath << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    PrintObjData(objMeshData);   // 打印出来检查数据是否正确
 
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW); // 数据上传到显卡
+    // 建立网格并上传到 GPU（直接把加载结果喂给 setData）
+    Mesh mesh;
+    mesh.setData(objMeshData.vertices.data(),
+                 static_cast<int>(objMeshData.vertices.size()),
+                 objMeshData.indices.data(),
+                 static_cast<int>(objMeshData.indices.size()));
 
-    // location = 0：位置（3 个 float）
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
 
-    // location = 1：颜色（3 个 float），从第 3 个 float 开始
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);  
+    // MVP矩阵
+    glm::mat4 modelMat = glm::mat4(1.0f); // 模型矩阵，位置不变化，所以使用单位矩阵
+    // 如果你想让物体转一转，比如绕X轴转个角度：
+    // model = glm::rotate(model, glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    // ===== 2. View矩阵（摄像机） =====
+    // glm::lookAt(摄像机位置, 看向的目标点, 上方向)
+    glm::mat4 view = glm::lookAt(
+        glm::vec3(4.0f, 2.0f, 5.0f),  // eye: 摄像机在 (0, 0, -2)
+        glm::vec3(0.0f, 0.0f, 0.0f),   // center: 看向原点（物体在原点）
+        glm::vec3(0.0f, 1.0f, 0.0f)    // up: Y轴向上
+    );
+    float aspect = (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT;
+    glm::mat4 projection = glm::perspective(
+        glm::radians(45.0f),           // FOV: 45度
+        aspect,                        // aspect: 宽高比
+        0.1f,                          // near: 近裁剪面
+        100.0f);                       // far: 远裁剪面
 
     // ---------------------------------------------------------------
     // 【第 6 步】渲染主循环
@@ -161,15 +177,25 @@ int main(){
     // （没有 glDrawArrays 等），也没有使用上面读到的着色器。
     // ---------------------------------------------------------------
     // 渲染循环
+
+
+    
+    // 所有 OpenGL 调用必须在 GLAD 加载之后！
+    // 设置清屏颜色（RGBA，取值范围 0.0~1.0）。
+    // 这里是一种青绿色: R=0.2 G=0.3 B=0.3 A=1.0
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f); // 设置清屏颜色
+
     while (!glfwWindowShouldClose(window)) {
         // 清空颜色缓冲（用 glClearColor 设置的颜色填充窗口）
-        glClear(GL_COLOR_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // 绘制网格
         glUseProgram(shader.ID);
-
-
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);   // 从第 0 个顶点开始，取 3 个，组成三角形
+        shader.SetMatrix(modelMat, view, projection);
+        shader.SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f));
+        mesh.draw();
+        
 
         // 处理所有窗口事件（键盘输入、鼠标移动等）
         glfwPollEvents();
@@ -181,10 +207,6 @@ int main(){
     // glfwTerminate 释放 GLFW 占用的所有资源（窗口、上下文等）。
     // 返回 0 表示程序正常结束。
     // ---------------------------------------------------------------
-    // 清理
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-
     glfwTerminate();
 
     return 0;

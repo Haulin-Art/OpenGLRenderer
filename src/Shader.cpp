@@ -101,3 +101,18 @@ unsigned int Shader::compileShader(GLenum shaderType, const std::string& shaderS
     // 返回 shader 对象的 ID，后续可以用它来链接程序或删除 shader
     return shader;
 }
+
+// 设置MVP矩阵Uniform
+void Shader::SetMatrix(const glm::mat4& ModelMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix)
+{
+    glUniformMatrix4fv(glGetUniformLocation(ID, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(ModelMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(ID, "ViewMatrix"), 1, GL_FALSE, glm::value_ptr(ViewMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(ID, "ProjectionMatrix"), 1, GL_FALSE, glm::value_ptr(ProjectionMatrix));
+}
+
+// 设置Light Uniform
+void Shader::SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor)
+{
+    glUniform3fv(glGetUniformLocation(ID, "mainLightPos"), 1, glm::value_ptr(lightPos));
+    glUniform3fv(glGetUniformLocation(ID, "mainLightColor"), 1, glm::value_ptr(lightColor));
+}

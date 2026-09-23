@@ -11,3 +11,6 @@
 #include <string>  // 字符串类
 
 #include "Shader.h"
+#include "Mesh.h"
+
+#include "ObjLoader.h"

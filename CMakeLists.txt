@@ -15,6 +15,8 @@ add_executable(OpenGLRenderer
     src/Mesh.cpp
     src/Shader.h
     src/Shader.cpp
+    src/ObjLoader.h
+    src/ObjLoader.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
@@ -121,6 +123,40 @@ target_include_directories(glfw3 INTERFACE
 )
 
 # ============================================
-# 链接：将 GLAD 和 GLFW 链接到主程序
+# 第三方库 3: GLM — 数学库 (OpenGL Mathematics)
+#
+# GLM 是纯头文件库，不需要编译成 .a/.lib。
+# 它提供 mat4 / vec3 等类型，以及 perspective / lookAt / radians
+# 等函数，用来计算 MVP 矩阵。
+#
+# INTERFACE 库: 本身不产生编译产物，只把"使用方法"(这里是头文件路径)
+#               传递给链接它的目标。
+#
+# 头文件实际位于 dependencies/glm/glm/glm.hpp，
+# 所以 include 目录指向 dependencies/glm，
+# 代码里写 #include <glm/glm.hpp> 即可。
 # ============================================
-target_link_libraries(OpenGLRenderer PRIVATE glad glfw3 OpenGL::GL)
+add_library(glm INTERFACE)
+target_include_directories(glm INTERFACE
+    ${CMAKE_SOURCE_DIR}/dependencies/glm
+)
+
+# ============================================
+# 第三方库 4: tinyobjloader — OBJ 模型解析器
+#
+# 单头文件库 (header-only)，不需要编译成 .a/.lib。
+# 头文件位于 dependencies/tinyobjloader/tiny_obj_loader.h，
+# 代码里写 #include "tiny_obj_loader.h" 即可。
+#
+# 注意: 它需要在某一个 .cpp 里 #define TINYOBJLOADER_IMPLEMENTATION
+#       再 include，才能把实现编译出来（本项目的 ObjLoader.cpp 负责这件事）。
+# ============================================
+add_library(tinyobjloader INTERFACE)
+target_include_directories(tinyobjloader INTERFACE
+    ${CMAKE_SOURCE_DIR}/dependencies/tinyobjloader
+)
+
+# ============================================
+# 链接：将 GLAD、GLFW、GLM、tinyobjloader 链接到主程序
+# ============================================
+target_link_libraries(OpenGLRenderer PRIVATE glad glfw3 OpenGL::GL glm tinyobjloader)
