@@ -23,6 +23,22 @@ Mesh::~Mesh()
     glDeleteBuffers(1, &EBO);
 }
 
+// ---- 上传数据到 GPU ----
+// 函数重载，可以选择直接输入数据，或者输入ObjMeshData
+void Mesh::setData(const float* vertices, int vertexCount,
+                   const unsigned int* indices, int indexCount)
+{
+    setDataInternal(vertices, vertexCount, indices, indexCount);
+}
+void Mesh::setData(const ObjMeshData& objMeshData)
+{
+    setDataInternal(objMeshData.vertices.data(),                   // 顶点数组
+                 static_cast<int>(objMeshData.vertices.size()), // 顶点数
+                 objMeshData.indices.data(),                    // 索引数组
+                 static_cast<int>(objMeshData.indices.size())); // 索引数
+}
+
+
 // ============================================
 // setData — 上传顶点和索引数据到 GPU 显存
 //
@@ -32,7 +48,7 @@ Mesh::~Mesh()
 // GL_STATIC_DRAW: 告诉 GPU 驱动"这些数据不会频繁修改"，
 // 驱动可以把它们放在读取速度最快的显存区域。
 // ============================================
-void Mesh::setData(const float* vertices, int vertexCount,
+void Mesh::setDataInternal(const float* vertices, int vertexCount,
                    const unsigned int* indices, int indexCount)
 {
     mIndexCount = indexCount;  // 保存索引数量，供 draw() 使用

@@ -12,5 +12,6 @@
 
 #include "Shader.h"
 #include "Mesh.h"
+#include "RenderObject.h"
 
 #include "ObjLoader.h"

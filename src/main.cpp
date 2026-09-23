@@ -128,11 +128,11 @@ int main(){
     unsigned int indices[] ={
         0,1,2
     };
-
     // ======================================== 加载 OBJ 模型 ======================================================
     // 从文件读取模型，替换掉之前硬编码的顶点数组。
     // LoadObj 内部会做"顶点展开"，输出 GPU 直接可用的交错格式:
     //   每顶点 8 个 float = 位置(3) + 法线(3) + UV(2)
+    // 猴头模型
     ObjMeshData objMeshData;
     const std::string objPath = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/monkey.obj";
     if (!LoadObj(objPath, objMeshData)) {
@@ -140,17 +140,22 @@ int main(){
         glfwTerminate();
         return -1;
     }
-    PrintObjData(objMeshData);   // 打印出来检查数据是否正确
-
     // 建立网格并上传到 GPU（直接把加载结果喂给 setData）
     Mesh mesh;
-    mesh.setData(objMeshData.vertices.data(),
-                 static_cast<int>(objMeshData.vertices.size()),
-                 objMeshData.indices.data(),
-                 static_cast<int>(objMeshData.indices.size()));
+    mesh.setData(objMeshData);
+    // 平面
+    ObjMeshData objMeshData1;
+    const std::string objPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/plane.obj";
+    if (!LoadObj(objPath1, objMeshData1)) {
+        std::cerr << "加载 OBJ 失败: " << objPath1 << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    // 建立网格并上传到 GPU（直接把加载结果喂给 setData）
+    Mesh plane;
+    plane.setData(objMeshData1);
 
-
-    // MVP矩阵
+    // ======================================= MVP矩阵 ================================================================
     glm::mat4 modelMat = glm::mat4(1.0f); // 模型矩阵，位置不变化，所以使用单位矩阵
     // 如果你想让物体转一转，比如绕X轴转个角度：
     // model = glm::rotate(model, glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -168,6 +173,24 @@ int main(){
         0.1f,                          // near: 近裁剪面
         100.0f);                       // far: 远裁剪面
 
+
+    // ==================================== 渲染物体清单 ===================================
+    std::vector<RenderObject> renderObjects;
+
+    RenderObject monkey1;
+    monkey1.mesh = &mesh;
+    monkey1.shader = &shader;
+    monkey1.transform = glm::mat4(1.0f);
+    renderObjects.push_back(monkey1);  // 这个意思是加到数组末尾
+
+    RenderObject plane1;
+    plane1.mesh = &plane;
+    plane1.shader = &shader;
+    // 平面缩放3倍，然后向下平移2个单位
+    plane1.transform = glm::translate(glm::scale(glm::mat4(1.0f),glm::vec3(3.0f, 3.0f, 3.0f)),glm::vec3(0.0f, -0.27f, 0.0f));
+    renderObjects.push_back(plane1);
+
+
     // ---------------------------------------------------------------
     // 【第 6 步】渲染主循环
     //
@@ -179,7 +202,6 @@ int main(){
     // 渲染循环
 
 
-    
     // 所有 OpenGL 调用必须在 GLAD 加载之后！
     // 设置清屏颜色（RGBA，取值范围 0.0~1.0）。
     // 这里是一种青绿色: R=0.2 G=0.3 B=0.3 A=1.0
@@ -190,12 +212,15 @@ int main(){
         glEnable(GL_DEPTH_TEST);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // 绘制网格
-        glUseProgram(shader.ID);
-        shader.SetMatrix(modelMat, view, projection);
-        shader.SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f));
-        mesh.draw();
-        
+        // 绘制物体
+        for (int i = 0; i < (int)renderObjects.size(); i++)
+        {
+            RenderObject& obj = renderObjects[i];
+            glUseProgram(obj.shader->ID);         // 使用着色器程序
+            obj.shader->SetMatrix(obj.transform, view, projection);  // 设置 MVP 矩阵
+            obj.shader->SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
+            obj.mesh->draw();                     // 绘制网格
+        }
 
         // 处理所有窗口事件（键盘输入、鼠标移动等）
         glfwPollEvents();

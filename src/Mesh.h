@@ -27,6 +27,7 @@
 class Mesh
 {
     public:
+
         // ---- 构造/析构 ----
         // 构造时所有句柄初始化为 0
         Mesh();
@@ -49,6 +50,9 @@ class Mesh
         //   4. glEnableVertexAttribArray → 启用顶点属性
         void setData(const float* vertices, int vertexCount,
                      const unsigned int* indices, int indexCount);
+
+        // 使用ObjLoader加载obj文件
+        void setData(const ObjMeshData& objMeshData);
 
         // ---- 绘制 ----
         // 绑定 VAO，调用 glDrawElements 绘制三角形
@@ -74,4 +78,8 @@ class Mesh
         //   用于 glDrawElements 的 count 参数
         //   例如 36 个索引 → 36/3 = 12 个三角形 → 6 个面 × 2 个三角形 = 一个立方体
         int mIndexCount;
+
+        // setData的内部实现，所有Public方法都会调用此方法
+        void setDataInternal(const float* vertices, int vertexCount,
+                     const unsigned int* indices, int indexCount);
 };

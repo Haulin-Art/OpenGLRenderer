@@ -17,6 +17,8 @@ add_executable(OpenGLRenderer
     src/Shader.cpp
     src/ObjLoader.h
     src/ObjLoader.cpp
+    src/Camera.h
+    src/Camera.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
