@@ -12,6 +12,13 @@ Camera::Camera()
 
 Camera::~Camera() {}
 
+// 设置窗口大小
+void Camera::SetViewportSize(const glm::vec2& size)
+{
+    viewportSize = size;
+    aspectRatio =  (size.y > 0.0f) ? size.x / size.y : 1.0f;   // 防除零
+}
+
 // 左键按下: 开始拖拽，并把 lastX/lastY 对齐到当前光标位置
 void Camera::BeginDrag(double x, double y)
 {
@@ -62,4 +69,11 @@ void Camera::Update()
         glm::vec3(0.0f, 0.0f, 0.0f),     // 目标位置
         glm::vec3(0.0f, 1.0f, 0.0f)      // 上方向
     );
+
+    
+    ProjectionMatrix = glm::perspective(
+        glm::radians(45.0f),           // FOV: 45度
+        aspectRatio,                        // aspect: 宽高比
+        0.1f,                          // near: 近裁剪面
+        100.0f);                       // far: 远裁剪面
 }

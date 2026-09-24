@@ -15,11 +15,13 @@
 class Shader
 {
     public:
-        unsigned int ID; // 着色器程序ID
+        unsigned int ID = 0; // 着色器程序ID
         // 构造函数，传入顶点着色器和片段着色器的文件路径
         Shader(const std::string& vertexPath, const std::string& fragmentPath);
         // 析构函数
         ~Shader();
+
+        void Use(); // 使用着色器程序
 
         // 设置MVP矩阵Uniform
         void SetMatrix(const glm::mat4& ModeMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix);

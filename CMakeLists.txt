@@ -8,22 +8,48 @@ project(OpenGLRenderer VERSION 1.0.0 LANGUAGES C CXX)
 find_package(OpenGL REQUIRED)
 
 # 在这里配置文件
+# 注意: 每新增一个 .cpp 都必须写进这份清单，否则它不会被编译，
+#       调用它的地方会在链接阶段报 undefined reference。
+# 按架构分层分组，新增文件时对号入座即可。
 add_executable(OpenGLRenderer
+    # ---- 基础 / 工具 ----
     src/config.h
     src/main.cpp
-    src/Mesh.h
-    src/Mesh.cpp
-    src/Shader.h
-    src/Shader.cpp
     src/ObjLoader.h
     src/ObjLoader.cpp
-    src/Camera.h
-    src/Camera.cpp
+
+    # ---- 渲染资源（按目标架构，日后迁往 Render/OpenGL 与 Resources）----
+    src/Shader.h
+    src/Shader.cpp
+    src/Mesh.h
+    src/Mesh.cpp
+    src/RenderObject.h                              # 临时结构，最终由 Scene 层取代
+
+    # ---- Render: 渲染核心层（与图形 API 无关）----
+    src/Render/RenderCommand.h                      # Transform + RenderCommand
+    src/Render/Renderer.h                           # 渲染后端接口
+    src/Render/Camera/Camera.h                      # 轨道摄像机，产出 View/Projection
+    src/Render/Camera/Camera.cpp
+
+    # ---- Render/OpenGL: 具体 API 实现 ----
+    src/Render/OpenGL/OpenGLRenderer.h              # 唯一允许出现 gl* / glfw* 的地方
+    src/Render/OpenGL/OpenGLRenderer.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
 target_compile_definitions(OpenGLRenderer PRIVATE
     PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+# 头文件搜索路径
+# 代码分了子目录后，带引号的 #include 只在"当前文件所在目录"和下面的 -I 路径里找，
+# 所以每新增一个目录，都要把它的路径加到这里，否则该目录下的
+# #include "xxx.h" 会报 "No such file or directory"。
+target_include_directories(OpenGLRenderer PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/Render
+    ${CMAKE_SOURCE_DIR}/src/Render/Camera
+    ${CMAKE_SOURCE_DIR}/src/Render/OpenGL
 )
 
 # ============================================

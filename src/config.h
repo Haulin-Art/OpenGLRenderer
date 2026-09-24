@@ -13,5 +13,7 @@
 #include "Shader.h"
 #include "Mesh.h"
 #include "RenderObject.h"
+#include "Renderer.h"
+#include "OpenGLRenderer.h"
 
 #include "ObjLoader.h"

@@ -4,12 +4,18 @@
 Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath)
     : mVertexPath(vertexPath), mFragmentPath(fragmentPath)  // 使用成员初始化列表初始化常量成员变量
 {
-    buildFromFiles(mVertexPath,mFragmentPath);
+   buildFromFiles(mVertexPath,mFragmentPath);
 }
 
 Shader::~Shader()
 {
     if(ID!=0) glDeleteProgram(ID);
+}
+
+// 构建并使用
+void Shader::Use()
+{
+    glUseProgram(ID);
 }
 
 // Shader

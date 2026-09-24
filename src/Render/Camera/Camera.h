@@ -18,6 +18,8 @@ class Camera
         Camera();
         ~Camera();
 
+        void SetViewportSize(const glm::vec2& size);
+
         // 鼠标拖拽用
         bool   dragging = false;   // 左键现在是不是按着
 
@@ -46,7 +48,14 @@ class Camera
         glm::mat4 ViewMatrix = glm::mat4(1.0f);
         glm::vec3 Position = glm::vec3(0.0f, 0.0f, 5.0f);
 
+        // 投影矩阵
+        glm::mat4 ProjectionMatrix = glm::mat4(1.0f);
+
     private:
+        // 视图大小
+        glm::vec2 viewportSize = glm::vec2(800, 600);
+        float aspectRatio = 800.0f / 600.0f;
+
         double lastX = 0.0;        // 上一次鼠标的 x
         double lastY = 0.0;        // 上一次鼠标的 y
 };
