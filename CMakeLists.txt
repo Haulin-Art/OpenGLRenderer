@@ -28,6 +28,8 @@ add_executable(OpenGLRenderer
     # ---- Render: 渲染核心层（与图形 API 无关）----
     src/Render/RenderCommand.h                      # Transform + RenderCommand
     src/Render/Renderer.h                           # 渲染后端接口
+    src/Render/Material.h                           # 材质：Shader + 渲染状态
+    src/Render/Material.cpp
     src/Render/Camera/Camera.h                      # 轨道摄像机，产出 View/Projection
     src/Render/Camera/Camera.cpp
 

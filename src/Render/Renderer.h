@@ -36,6 +36,7 @@ class IRenderer {
         virtual void PollEvents() = 0; // 轮询事件
         virtual void EnableRendererFeature(BuiltInRendererFeatures feature) = 0; // 启用渲染特性
         virtual void DisableRendererFeature(BuiltInRendererFeatures feature) = 0; // 禁用渲染特性
+        //virtual void CreateTexture(unsigned int textureId, int width, int height) = 0;
 
         // 渲染队列
         // 这个渲染队列是不是得用指针？？？？

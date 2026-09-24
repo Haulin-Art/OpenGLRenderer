@@ -37,7 +37,7 @@ void Camera::EndDrag()
 void Camera::Update()
 {
     // 只有按着左键时才根据鼠标移动调整角度
-    if (dragging)
+    //if (dragging)
     {
         camYaw   += sensitivity * static_cast<float>(mouseX - lastX);
         camPitch -= sensitivity * static_cast<float>(mouseY - lastY);   // 屏幕 y 向下为正，所以取反

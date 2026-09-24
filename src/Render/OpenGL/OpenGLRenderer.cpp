@@ -141,6 +141,11 @@ void OpenGLRenderer::Render(Mesh* mesh, Shader* shader, glm::mat4& transform) {
 // 执行渲染命令
 void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& RenderCommandQueue,const glm::mat4& ViewMatrix, const glm::mat4& ProjectionMatrix) {
     // 在这里后续添加排序相关逻辑
+
+    glEnable(GL_MULTISAMPLE);  // 开启多重采样
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // BasePass
     for (auto& command : RenderCommandQueue) {
         command.shader->Use();         // 使用着色器程序
 

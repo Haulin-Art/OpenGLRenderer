@@ -27,6 +27,8 @@ class Camera
         double mouseX = 0.0;
         double mouseY = 0.0;
 
+        float aspectRatio = 800.0f / 600.0f;
+
         // 摄像机的状态（三个数描述它在球面上的位置）
         float camYaw    = 45.0f;   // 水平角，单位: 度
         float camPitch  = 20.0f;   // 俯仰角，单位: 度
@@ -54,7 +56,7 @@ class Camera
     private:
         // 视图大小
         glm::vec2 viewportSize = glm::vec2(800, 600);
-        float aspectRatio = 800.0f / 600.0f;
+        
 
         double lastX = 0.0;        // 上一次鼠标的 x
         double lastY = 0.0;        // 上一次鼠标的 y

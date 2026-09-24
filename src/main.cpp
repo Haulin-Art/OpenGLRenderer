@@ -23,10 +23,18 @@ int main(){
         return -1;
     }
 
+    // ======================================== 摄像机 ======================================================
+    Camera camera;
+    camera.SetViewportSize(renderer->GetWindowSize());  // 设置摄像机窗口大小
+
     // ======================================== Shader ======================================================
     std::string vsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicvertex.glsl";
     std::string fsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicfrag.glsl";
     Shader shader(vsPath, fsPath);
+    // 平面Shader
+    std::string vsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetVertex.glsl";
+    std::string fsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetFrag.glsl";
+    Shader planeShader(vsPath1, fsPath1);
 
 
     // ======================================== 基础三角形网格 ======================================================
@@ -83,17 +91,34 @@ int main(){
         aspect,                        // aspect: 宽高比
         0.1f,                          // near: 近裁剪面
         100.0f);                       // far: 远裁剪面
-
+    // ===== 4. Projection矩阵（正交投影） =====
+    // 假设你想让摄像机前方 20x20 的世界单位区域可见，并根据窗口宽高比调整宽度
+    float viewHeight = 20.0f;
+    float viewWidth = viewHeight * camera.aspectRatio;
+    glm::mat4 OrthoProjectionMatrix = glm::ortho(
+        -viewWidth / 2.0f,  // left
+         viewWidth / 2.0f,  // right
+        -viewHeight / 2.0f, // bottom
+         viewHeight / 2.0f, // top
+         0.1f,              // near (注意：正交投影中 near/far 也要合理设置，不能都为正但顺序反了)
+         100.0f             // far
+    );
 
     // ==================================== 渲染队列 ===================================
     std::vector<RenderCommand> renderQueue;
     renderQueue.push_back(RenderCommand(&mesh, &shader, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
-    renderQueue.push_back(RenderCommand(&plane, &shader, Transform(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(3.0f, 3.0f, 3.0f))));
+    renderQueue.push_back(RenderCommand(&plane, &planeShader, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
 
 
     // ---------------------------------------------------------------
     // 【第 6 步】渲染主循环
     while (!renderer->WindowShouldClose()) {
+
+        // 处理所有窗口事件（键盘输入、鼠标移动等）
+        renderer->PollEvents();
+        camera.mouseX += 1.0;
+        camera.Update();
+
         // 开启深度测试
         renderer->EnableRendererFeature(BuiltInRendererFeatures::DepthTest);
 
@@ -101,10 +126,9 @@ int main(){
         renderer->Clear();  // 清空颜色缓冲
 
         // 执行渲染命令
-        renderer->ExecuteRenderCommands(renderQueue,view, projection);
+        renderer->ExecuteRenderCommands(renderQueue, camera.ViewMatrix, camera.ProjectionMatrix);
 
-        // 处理所有窗口事件（键盘输入、鼠标移动等）
-        renderer->PollEvents();
+
         renderer->SwapBuffers(); // 交换前后缓冲区（把画好的内容显示到屏幕）
     }
 

@@ -20,7 +20,7 @@ class OpenGLRenderer : public IRenderer {
         bool Init() override;
         void* GetWindow() override;
         void Render(Mesh* mesh, Shader* shader, glm::mat4& transform) override;
-        void SetClearColor(const glm::vec4& color = glm::vec4(0.2f, 0.3f, 0.3f, 1.0f)) override;
+        void SetClearColor(const glm::vec4& color = glm::vec4(0.25f, 0.25f, 0.25f, 1.0f)) override;
         void Clear() override;
 
         // 封装API
@@ -30,7 +30,7 @@ class OpenGLRenderer : public IRenderer {
         void EnableRendererFeature(BuiltInRendererFeatures feature) override;
         void DisableRendererFeature(BuiltInRendererFeatures feature) override;
 
-        // 执行渲染队列
+        // 执行渲染队列命令
         void ExecuteRenderCommands(const std::vector<RenderCommand>& RenderCommandQueue,const glm::mat4& ViewMatrix, const glm::mat4& ProjectionMatrix) override;
     private:
         const int WINDOW_WIDTH = 800;
@@ -39,6 +39,5 @@ class OpenGLRenderer : public IRenderer {
 
         // 将 IRenderer 当中的 BuiltInRendererFeatures 转换为 OpenGL 的 GLenum
         GLenum ConvertBuiltInRendererFeaturesToGLenum(BuiltInRendererFeatures feature);
-
 
 };

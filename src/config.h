@@ -12,7 +12,7 @@
 
 #include "Shader.h"
 #include "Mesh.h"
-#include "RenderObject.h"
+#include "Camera.h"
 #include "Renderer.h"
 #include "OpenGLRenderer.h"
 
