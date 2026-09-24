@@ -2,6 +2,13 @@
 
 #include <glm/glm.hpp>
 
+struct CameraData
+{
+    glm::vec3 position;
+    glm::mat4 viewMatrix;
+    glm::mat4 projectionMatrix;
+};
+
 // ============================================
 // Camera — 轨道摄像机（围绕原点旋转）
 //
@@ -46,12 +53,7 @@ class Camera
         // 更新摄像机状态，每帧调用一次
         void Update();
 
-        // 视图矩阵
-        glm::mat4 ViewMatrix = glm::mat4(1.0f);
-        glm::vec3 Position = glm::vec3(0.0f, 0.0f, 5.0f);
-
-        // 投影矩阵
-        glm::mat4 ProjectionMatrix = glm::mat4(1.0f);
+        CameraData GetCameraData(){ return mCameraData; };
 
     private:
         // 视图大小
@@ -60,4 +62,6 @@ class Camera
 
         double lastX = 0.0;        // 上一次鼠标的 x
         double lastY = 0.0;        // 上一次鼠标的 y
+
+        CameraData mCameraData;
 };

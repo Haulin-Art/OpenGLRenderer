@@ -5,6 +5,7 @@
 
 #include "Mesh.h"
 #include "Shader.h"
+#include "Material.h"
 
 // 物体的变换
 struct Transform {
@@ -15,6 +16,6 @@ struct Transform {
 // 最小渲染命令块
 struct RenderCommand {
     Mesh* mesh;
-    Shader* shader;
+    Material* material;
     Transform transform;
 };

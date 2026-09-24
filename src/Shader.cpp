@@ -122,3 +122,9 @@ void Shader::SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor)
     glUniform3fv(glGetUniformLocation(ID, "mainLightPos"), 1, glm::value_ptr(lightPos));
     glUniform3fv(glGetUniformLocation(ID, "mainLightColor"), 1, glm::value_ptr(lightColor));
 }
+
+// 设置Camera Uniform
+void Shader::SetCamera(const glm::vec3& cameraPos)
+{
+    glUniform3fv(glGetUniformLocation(ID, "CameraPos"), 1, glm::value_ptr(cameraPos));
+}

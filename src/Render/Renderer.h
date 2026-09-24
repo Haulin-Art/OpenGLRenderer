@@ -5,6 +5,7 @@
 
 #include "Mesh.h"
 #include "Shader.h"
+#include "Camera.h"
 
 // 底层API内置渲染特性
 enum class BuiltInRendererFeatures{
@@ -40,5 +41,5 @@ class IRenderer {
 
         // 渲染队列
         // 这个渲染队列是不是得用指针？？？？
-        virtual void ExecuteRenderCommands(const std::vector<RenderCommand>& RenderCommandQueue,const glm::mat4& ViewMatrix, const glm::mat4& ProjectionMatrix) = 0; // 执行所有渲染命令
+        virtual void ExecuteRenderCommands(const std::vector<RenderCommand>& RenderCommandQueue,const CameraData& RenderingCameraData) = 0; // 执行所有渲染命令
 };

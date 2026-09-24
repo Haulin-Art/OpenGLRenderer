@@ -57,23 +57,25 @@ void Camera::Update()
     const float pitchRad = glm::radians(camPitch);
 
     // 球坐标 → 直角坐标
-    Position = glm::vec3(
+    mCameraData.position = glm::vec3(
         camRadius * std::sin(yawRad) * std::cos(pitchRad),
         camRadius * std::sin(pitchRad),
         camRadius * std::cos(yawRad) * std::cos(pitchRad)
     );
 
     // 始终看向原点
-    ViewMatrix = glm::lookAt(
-        Position,                        // 摄像机位置
+    mCameraData.viewMatrix = glm::lookAt(
+        mCameraData.position,                        // 摄像机位置
         glm::vec3(0.0f, 0.0f, 0.0f),     // 目标位置
         glm::vec3(0.0f, 1.0f, 0.0f)      // 上方向
     );
 
     
-    ProjectionMatrix = glm::perspective(
+    mCameraData.projectionMatrix = glm::perspective(
         glm::radians(45.0f),           // FOV: 45度
         aspectRatio,                        // aspect: 宽高比
         0.1f,                          // near: 近裁剪面
         100.0f);                       // far: 远裁剪面
+
+    
 }

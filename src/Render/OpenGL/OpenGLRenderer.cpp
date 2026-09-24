@@ -1,6 +1,7 @@
 #include "OpenGLRenderer.h"
 
 OpenGLRenderer::OpenGLRenderer(const int width, const int height) : WINDOW_WIDTH(width), WINDOW_HEIGHT(height) {
+
 }
 
 OpenGLRenderer::~OpenGLRenderer() {
@@ -130,6 +131,8 @@ void OpenGLRenderer::SetClearColor(const glm::vec4& color) {
 }
 // 清屏
 void OpenGLRenderer::Clear() {
+    glDepthMask(GL_TRUE);
+    mRenderState.depthWrite = true;   // 改了 GL 状态，这里如果不重新设置开启，当绘制关闭了深度写入的透明物体后，深度缓存会失效，缓存必须同步（否则又会不一致）
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
@@ -139,15 +142,22 @@ void OpenGLRenderer::Render(Mesh* mesh, Shader* shader, glm::mat4& transform) {
 
 // 渲染队列
 // 执行渲染命令
-void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& RenderCommandQueue,const glm::mat4& ViewMatrix, const glm::mat4& ProjectionMatrix) {
+void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& RenderingCommandQueue,const CameraData& RenderingCameraData) {
+    // 获取视图矩阵和投影矩阵
+    glm::mat4 ViewMatrix = RenderingCameraData.viewMatrix;
+    glm::mat4 ProjectionMatrix = RenderingCameraData.projectionMatrix;
     // 在这里后续添加排序相关逻辑
 
+
     glEnable(GL_MULTISAMPLE);  // 开启多重采样
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     // BasePass
-    for (auto& command : RenderCommandQueue) {
-        command.shader->Use();         // 使用着色器程序
+    for (auto& command : RenderingCommandQueue) {
+        // 获取着色器
+        // 对象用 . , 指针用 ->
+        command.material->GetShader()->Use();         // 使用着色器程序
+
+        // 设置渲染状态
+        ApplyRenderState(command.material->renderState);
 
         // 根据变换参数设置模型矩阵
         // 其实这个部分应该是直接存储的，而不是在执行时反复计算？
@@ -159,9 +169,91 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
         modelMatrix = glm::scale(modelMatrix, command.transform.scale);
 
         // 设置 MVP 矩阵
-        command.shader->SetMatrix(modelMatrix, ViewMatrix, ProjectionMatrix);  // 设置 MVP 矩阵
-        command.shader->SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
+        command.material->GetShader()->SetMatrix(modelMatrix, ViewMatrix, ProjectionMatrix);  // 设置 MVP 矩阵
+        command.material->GetShader()->SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
+        command.material->GetShader()->SetCamera(RenderingCameraData.position); // 设置相机位置
         command.mesh->draw();                     // 绘制网格
+
     }
     //RenderCommandQueue.clear();
+}
+
+void OpenGLRenderer::ApplyRenderState(const RenderState& renderState) {
+
+    // 深度测试
+    if(renderState.depthTest != mRenderState.depthTest){
+        if(renderState.depthTest){
+            glEnable(GL_DEPTH_TEST);
+        }else{
+            glDisable(GL_DEPTH_TEST);
+        }
+        mRenderState.depthTest = renderState.depthTest;
+    }
+    // 深度写入
+    if(renderState.depthWrite != mRenderState.depthWrite){
+        if(renderState.depthWrite){
+            glDepthMask(GL_TRUE);
+        }else{
+            glDepthMask(GL_FALSE);
+        }
+        mRenderState.depthWrite = renderState.depthWrite;
+    }
+    // 深度比较
+    if(renderState.depthFunc != mRenderState.depthFunc){
+        glDepthFunc(RenderStateToOpenGL(renderState.depthFunc));
+        mRenderState.depthFunc = renderState.depthFunc;
+    }
+    // 剔除模式
+    if(renderState.cullMode != mRenderState.cullMode){
+        if(renderState.cullMode == CullMode::Off){
+            glDisable(GL_CULL_FACE);
+        }else{
+            glEnable(GL_CULL_FACE);
+            glCullFace(RenderStateToOpenGL(renderState.cullMode));
+        }
+        mRenderState.cullMode = renderState.cullMode;
+    }
+    // 混合模式
+    if(renderState.blend != mRenderState.blend){
+        if(renderState.blend == BlendMode::Opaque){
+            glDisable(GL_BLEND);
+        }else{
+            glEnable(GL_BLEND);
+            glBlendFunc(RenderStateToOpenGL(renderState.blend), GL_ONE_MINUS_SRC_ALPHA);
+        }
+        mRenderState.blend = renderState.blend;
+    }
+
+    
+}
+
+GLenum OpenGLRenderer::RenderStateToOpenGL(DepthFunc f) {
+    switch (f) {
+        case DepthFunc::Never:        return GL_NEVER;
+        case DepthFunc::Less:         return GL_LESS;
+        case DepthFunc::Equal:        return GL_EQUAL;
+        case DepthFunc::LessEqual:    return GL_LEQUAL;
+        case DepthFunc::Greater:      return GL_GREATER;
+        case DepthFunc::NotEqual:     return GL_NOTEQUAL;
+        case DepthFunc::GreaterEqual: return GL_GEQUAL;
+        case DepthFunc::Always:       return GL_ALWAYS;
+    }
+    return GL_LESS;
+}
+GLenum OpenGLRenderer::RenderStateToOpenGL(CullMode m) {
+    switch (m) {
+        case CullMode::Off:   return GL_NONE;
+        case CullMode::Front: return GL_FRONT;
+        case CullMode::Back:  return GL_BACK;
+    }
+    return GL_BACK;
+}
+GLenum OpenGLRenderer::RenderStateToOpenGL(BlendMode m) {
+    switch (m) {
+        case BlendMode::Opaque:     return GL_ONE;
+        case BlendMode::AlphaBlend: return GL_SRC_ALPHA;
+        case BlendMode::Additive:   return GL_ONE;
+        case BlendMode::Multiply:   return GL_ZERO;
+    }
+    return GL_ONE;
 }

@@ -13,10 +13,10 @@ enum class BlendMode {
 };
 
 struct RenderState {
-    bool depthTest = true;
+    bool depthTest = false;
     bool depthWrite = true;
     DepthFunc depthFunc  = DepthFunc::Less;
-    CullMode  cullMode   = CullMode::Back;
+    CullMode  cullMode   = CullMode::Off;
     BlendMode blend      = BlendMode::Opaque;
     // 排序依据
     bool operator<(const RenderState& o) const {
@@ -25,7 +25,6 @@ struct RenderState {
     }
 };
 
-
 class Material {
     public:
         Material(Shader* shader);
@@ -33,8 +32,7 @@ class Material {
 
         void SetShader(Shader* shader);
         Shader* GetShader() const { return m_Shader; }
-        RenderState RenderState;
-
+        RenderState renderState;
 
     private:
         Shader* m_Shader = nullptr;

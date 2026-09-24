@@ -29,6 +29,9 @@ class Shader
         // 设置灯光Uniform
         void SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor);
 
+        // 设置摄像机相关Uniform
+        void SetCamera(const glm::vec3& cameraPos);
+
     private:
         const std::string mVertexPath;   // 顶点着色器文件路径
         const std::string mFragmentPath; // 片段着色器文件路径

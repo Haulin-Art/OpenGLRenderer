@@ -28,13 +28,20 @@ int main(){
     camera.SetViewportSize(renderer->GetWindowSize());  // 设置摄像机窗口大小
 
     // ======================================== Shader ======================================================
+    // 猴头
     std::string vsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicvertex.glsl";
     std::string fsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicfrag.glsl";
     Shader shader(vsPath, fsPath);
-    // 平面Shader
+    Material material(&shader);
+    material.renderState.depthTest = true;
+    // 平面Shader-半透明物体
     std::string vsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetVertex.glsl";
     std::string fsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetFrag.glsl";
     Shader planeShader(vsPath1, fsPath1);
+    Material planeMaterial(&planeShader);
+    planeMaterial.renderState.blend = BlendMode::AlphaBlend;
+    planeMaterial.renderState.depthTest = true;
+    planeMaterial.renderState.depthWrite = false;
 
 
     // ======================================== 基础三角形网格 ======================================================
@@ -106,8 +113,8 @@ int main(){
 
     // ==================================== 渲染队列 ===================================
     std::vector<RenderCommand> renderQueue;
-    renderQueue.push_back(RenderCommand(&mesh, &shader, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
-    renderQueue.push_back(RenderCommand(&plane, &planeShader, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
+    renderQueue.push_back(RenderCommand(&mesh, &material, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
+    renderQueue.push_back(RenderCommand(&plane, &planeMaterial, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
 
 
     // ---------------------------------------------------------------
@@ -120,13 +127,13 @@ int main(){
         camera.Update();
 
         // 开启深度测试
-        renderer->EnableRendererFeature(BuiltInRendererFeatures::DepthTest);
+        //renderer->EnableRendererFeature(BuiltInRendererFeatures::DepthTest);
 
         // 清空颜色缓冲（用 glClearColor 设置的颜色填充窗口）
         renderer->Clear();  // 清空颜色缓冲
 
         // 执行渲染命令
-        renderer->ExecuteRenderCommands(renderQueue, camera.ViewMatrix, camera.ProjectionMatrix);
+        renderer->ExecuteRenderCommands(renderQueue, camera.GetCameraData());
 
 
         renderer->SwapBuffers(); // 交换前后缓冲区（把画好的内容显示到屏幕）
