@@ -36,6 +36,9 @@ class Material {
         IShader* GetShader() const { return m_Shader; }
         RenderState renderState;
 
+        // ★ 新增：只描述"这个材质长什么样"，不认识任何 uniform 名
+        glm::vec3 baseColor = glm::vec3(1.0f);
+
     private:
         IShader* m_Shader = nullptr;
 };

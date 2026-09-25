@@ -34,6 +34,16 @@ int main(){
     shader->BuildFromFiles(vsPath, fsPath);
     Material material(shader);
     material.renderState.depthTest = true;
+
+    // 红色材质
+    Material material2(shader);
+    material2.renderState.depthTest = true;
+    material2.baseColor = glm::vec3(1.0,0.0,0.0);
+    // 绿色材质
+    Material material3(shader);
+    material3.renderState.depthTest = true;
+    material3.baseColor = glm::vec3(0.0,1.0,0.0);
+
     // 平面Shader-半透明物体
     std::string vsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetVertex.glsl";
     std::string fsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetFrag.glsl";
@@ -94,6 +104,9 @@ int main(){
     IMesh* plane2 = renderer->CreateMesh();
     plane2->SetData(objMeshData1);
 
+    // 平面3
+    IMesh* plane3 = renderer->CreateMesh();
+    plane3->SetData(objMeshData1);
     // ======================================= MVP矩阵 ================================================================
     // ===== 2. View矩阵（摄像机） =====
     // glm::lookAt(摄像机位置, 看向的目标点, 上方向)
@@ -126,7 +139,8 @@ int main(){
     RenderQueue renderQueueManager;
     renderQueueManager.Submit(RenderCommand(plane, &planeMaterial, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
     renderQueueManager.Submit(RenderCommand(mesh, &material, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
-    renderQueueManager.Submit(RenderCommand(plane2, &material, Transform(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(3.0f, 1.0f, 3.0f))));
+    renderQueueManager.Submit(RenderCommand(plane2, &material2, Transform(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(3.0f, 1.0f, 3.0f))));
+    //renderQueueManager.Submit(RenderCommand(plane3, &material3, Transform(glm::vec3(0.0f, 0.0f, -1.5f), glm::vec3(90.0f, 0.0f, 0.0f), glm::vec3(0.9f, 1.0f, 0.5f))));
     // 获取摄像机数据
     CameraData renderingCameraData = camera.GetCameraData();
 
@@ -143,6 +157,7 @@ int main(){
         //   只在启动时设一次的话，一旦窗口比例改变（拖边框），画面就会被拉伸变形
         camera.SetViewportSize(renderer->GetWindowSize());
 
+        // 临时冻住相机（验证颜色渗透）
         camera.mouseX += 1.0;
         camera.Update();
         renderingCameraData = camera.GetCameraData();

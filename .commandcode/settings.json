@@ -24,7 +24,10 @@
       "Shell(==:*)",
       "Shell(无输出:*)",
       "Shell(if:*)",
-      "Shell(else:*)"
+      "Shell(else:*)",
+      "Shell(copy:*)",
+      "Shell(copy /Y \"D:\\Document\\GitHub\\OpenGLRenderer\\src\\Render\\OpenGL\\Passes\\ShadowPass.cpp\" \"D:\\Temp\\commandcode\\D--Document-GitHub-OpenGLRenderer\\43164e81-4575-4777-a72a-45e702a56c57\\scratchpad\\passcheck\\\" >nul & copy /Y \"D:\\Document\\GitHub\\OpenGLRenderer\\src\\Render\\OpenGL\\Passes\\BasePass.cpp\" \"D:\\Temp\\commandcode\\D--Document-GitHub-OpenGLRenderer\\43164e81-4575-4777-a72a-45e702a56c57\\scratchpad\\passcheck\\\" >nul & cd /d D:\\Document\\GitHub\\OpenGLRenderer & echo == ShadowPass.cpp == & \"D:/Document/GitHub/Dev/CPP/w64devkit/bin/ccache-g++.exe\" -Wall -c \"D:/Temp/commandcode/D--Document-GitHub-OpenGLRenderer/43164e81-4575-4777-a72a-45e702a56c57/scratchpad/passcheck/ShadowPass.cpp\" -o \"D:/Temp/commandcode/D--Document-GitHub-OpenGLRenderer/43164e81-4575-4777-a72a-45e702a56c57/scratchpad/sp.o\" -DPROJECT_SOURCE_DIR=\\\"x\\\" -Isrc -Isrc/Render -Isrc/Render/Camera -Isrc/Render/OpenGL -Isrc/Core -Idependencies/glad/include -Idependencies/glm -Idependencies/tinyobjloader -Idependencies/glfw/include 2>&1 | head -20 & echo == BasePass.cpp == & \"D:/Document/GitHub/Dev/CPP/w64devkit/bin/ccache-g++.exe\" -Wall -c \"D:/Temp/commandcode/D--Document-GitHub-OpenGLRenderer/43164e81-4575-4777-a72a-45e702a56c57/scratchpad/passcheck/BasePass.cpp\" -o \"D:/Temp/commandcode/D--Document-GitHub-OpenGLRenderer/43164e81-4575-4777-a72a-45e702a56c57/scratchpad/bp.o\" -DPROJECT_SOURCE_DIR=\\\"x\\\" -Isrc -Isrc/Render -Isrc/Render/Camera -Isrc/Render/OpenGL -Isrc/Core -Idependencies/glad/include -Idependencies/glm -Idependencies/tinyobjloader -Idependencies/glfw/include 2>&1 | head -20 & echo == .o files == & dir /b \"D:\\Temp\\commandcode\\D--Document-GitHub-OpenGLRenderer\\43164e81-4575-4777-a72a-45e702a56c57\\scratchpad\\*.o\")",
+      "Shell(grep:*)"
     ],
     "deny": [],
     "defaultMode": "default"

@@ -17,4 +17,10 @@ class IShader{
         // Shadow Pass 嵌入式
         virtual void SetMat4(const std::string& name, const glm::mat4& value) = 0;
         virtual void SetInt (const std::string& name, int value) = 0;
+        // 屏幕空间 Pass 需要知道"屏幕有多大"才能把 gl_FragCoord 换算成 [0,1] 的 UV。
+        // ★ 必须传屏幕尺寸，不能拿 textureSize(屏幕空间纹理) 当分母：
+        //   两者只有在"屏幕空间纹理是全分辨率"时才相等；一旦降分辨率（比如半分辨率），
+        //   textureSize 会变成一半，UV 就会变成 0~2 → 画面被缩小贴到左下角。
+        virtual void SetVec2(const std::string& name, const glm::vec2& value) = 0;
+        virtual void SetVec3(const std::string& name, const glm::vec3& value) = 0;
 };

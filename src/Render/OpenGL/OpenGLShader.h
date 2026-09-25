@@ -28,6 +28,8 @@ class OpenGLShader : public IShader {
         // Shadow Pass 嵌入式
         void SetMat4(const std::string& name, const glm::mat4& value) override;
         void SetInt (const std::string& name, int value) override;
+        void SetVec2(const std::string& name, const glm::vec2& value) override;
+        void SetVec3(const std::string& name, const glm::vec3& value) override;
         
     private:
         unsigned int m_ID = 0; // 着色器程序ID

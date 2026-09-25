@@ -40,6 +40,31 @@ add_executable(OpenGLRenderer
     src/Render/RenderQueue.h
     src/Render/RenderQueue.cpp
     src/Core/MatrixTools.h
+    # ---- Render/OpenGL/Passes: 各渲染 Pass（后端相关，允许直接调 gl*）----
+    # ★ 注意：头文件写进 add_executable 只是为了在 IDE 里显示，
+    #   它不参与编译；但「列了但文件不存在」会让整个 configure 直接失败。
+    #   所以改文件名/挪目录时，这里一定要跟着改（或者干脆不列头文件）。
+    src/Render/OpenGL/Passes/OpenGLRenderPass.h     # Pass 基类 + 帧上下文
+    src/Render/OpenGL/Passes/FullscreenQuad.h       # 全屏三角形（后处理地基）
+    src/Render/OpenGL/Passes/FullscreenQuad.cpp
+    src/Render/OpenGL/Passes/ShadowPass.h
+    src/Render/OpenGL/Passes/ShadowPass.cpp
+    src/Render/OpenGL/Passes/GBufferPass.h
+    src/Render/OpenGL/Passes/GBufferPass.cpp
+    src/Render/OpenGL/Passes/SSGIPass.h
+    src/Render/OpenGL/Passes/SSGIPass.cpp
+    src/Render/OpenGL/Passes/SSGIBlurPass.h
+    src/Render/OpenGL/Passes/SSGIBlurPass.cpp
+    src/Render/OpenGL/Passes/SSAOPass.h             # 算 SSAO（全屏）
+    src/Render/OpenGL/Passes/SSAOPass.cpp
+    src/Render/OpenGL/Passes/SSAOBlurPass.h         # 把 SSAO 磨平（全屏）
+    src/Render/OpenGL/Passes/SSAOBlurPass.cpp
+    src/Render/OpenGL/Passes/ScreenShadowPass.h     # 屏幕空间 PCSS（全屏，半分辨率）
+    src/Render/OpenGL/Passes/ScreenShadowPass.cpp
+    src/Render/OpenGL/Passes/ScreenShadowBlurPass.h # 给 PCSS 去噪（全屏）
+    src/Render/OpenGL/Passes/ScreenShadowBlurPass.cpp
+    src/Render/OpenGL/Passes/BasePass.h
+    src/Render/OpenGL/Passes/BasePass.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
