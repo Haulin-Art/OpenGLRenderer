@@ -82,7 +82,17 @@ int main(){
     // 建立网格并上传到 GPU（直接把加载结果喂给 SetData）
     IMesh* plane = renderer->CreateMesh();
     plane->SetData(objMeshData1);
-
+    // 平面2
+    ObjMeshData objMeshData2;
+    const std::string objPath2 = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/plane.obj";
+    if (!LoadObj(objPath2, objMeshData2)) {
+        std::cerr << "加载 OBJ 失败: " << objPath2 << std::endl;
+        renderer->WindowTerminate();  // 终止窗口
+        return -1;
+    }
+    // 建立网格并上传到 GPU（直接把加载结果喂给 SetData）
+    IMesh* plane2 = renderer->CreateMesh();
+    plane2->SetData(objMeshData1);
 
     // ======================================= MVP矩阵 ================================================================
     // ===== 2. View矩阵（摄像机） =====
@@ -116,6 +126,7 @@ int main(){
     RenderQueue renderQueueManager;
     renderQueueManager.Submit(RenderCommand(plane, &planeMaterial, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
     renderQueueManager.Submit(RenderCommand(mesh, &material, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
+    renderQueueManager.Submit(RenderCommand(plane2, &material, Transform(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(3.0f, 1.0f, 3.0f))));
     // 获取摄像机数据
     CameraData renderingCameraData = camera.GetCameraData();
     // 渲染队列排序
@@ -133,7 +144,7 @@ int main(){
 
         // 渲染队列排序
         renderQueueManager.Sort(renderingCameraData.position);
-        
+
         // 清空颜色缓冲（用 glClearColor 设置的颜色填充窗口）
         renderer->Clear();  // 清空颜色缓冲
 

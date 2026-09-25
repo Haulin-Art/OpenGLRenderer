@@ -39,6 +39,7 @@ add_executable(OpenGLRenderer
     src/Render/Vulkan/VulkanRenderer.h
     src/Render/RenderQueue.h
     src/Render/RenderQueue.cpp
+    src/Core/MatrixTools.h
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
@@ -55,6 +56,7 @@ target_include_directories(OpenGLRenderer PRIVATE
     ${CMAKE_SOURCE_DIR}/src/Render
     ${CMAKE_SOURCE_DIR}/src/Render/Camera
     ${CMAKE_SOURCE_DIR}/src/Render/OpenGL
+    ${CMAKE_SOURCE_DIR}/src/Core
 )
 
 # ============================================

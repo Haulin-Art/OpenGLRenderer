@@ -2,7 +2,80 @@
 
 OpenGLRenderer::OpenGLRenderer(const int width, const int height) : WINDOW_WIDTH(width), WINDOW_HEIGHT(height) {
 
+
+
+
 }
+
+void OpenGLRenderer::InitShadowPass(){
+    // ================================= Shadow Pass On Begin ===========================================
+    std::string vsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/shadow_mapping_depth_vert.glsl";
+    std::string fsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/shadow_mapping_depth_frag.glsl";
+    mShadowShader = new OpenGLShader();
+    if (!mShadowShader->BuildFromFiles(vsPath, fsPath)) {
+        std::cerr << "Failed to build shadow shader" << std::endl;
+    }
+    // 这里后续添加阴影贴图渲染逻辑
+    // 灯光相关信息
+    const glm::vec3 lightDir = glm::normalize(glm::vec3(0.0f) - lightPos);  // 朝原点
+
+    // 方向光（平行光）用正交投影
+    lightProjection = glm::ortho(
+        -10.0f, 10.0f,      // ★ 必须恰好包住要投影的场景
+        -10.0f, 10.0f,
+         1.0f,              // ★ near 不能是 0！否则灯背后的东西会被"投影"进来
+        30.0f);
+
+    lightView = glm::lookAt(
+        lightPos,                            // 灯在哪
+        glm::vec3(0.0f),                     // 看向哪
+        glm::vec3(0.0f, 1.0f, 0.0f));        // 上方向
+
+    //glm::mat4 lightSpaceMatrix = GetLightSpaceMatrix(lightPos, lightDir);
+
+    // 建立阴影贴图的 FBO 和纹理
+    //GLuint depthTex = 0;  // 一个可以画的地方
+    //GLuint shadowFBO = 0;  // OpenGL 里实现 RT 的对象（一个容器）
+    //  附件（attachment）， FBO 上挂的缓冲：颜色 / 深度 / 模板
+    // RT 包含 Buffer（缓冲区），Buffer 包含 Texture（纹理）或 Renderbuffer（渲染缓冲）
+    glGenTextures(1, &depthTex); // 这里的 1 表示生成 1 个纹理对象，depthTex 是 GLuint 类型的纹理 ID
+    glBindTexture(GL_TEXTURE_2D, depthTex); // 这里绑定纹理对象，后续的纹理操作都会作用在这个纹理上
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,                          // mip 级别
+                 GL_DEPTH_COMPONENT24,       // ★ 内部格式：只要深度，24 位
+                 1024, 1024,   // 1024 或 2048
+                 0,                          // 边框（必须 0）
+                 GL_DEPTH_COMPONENT,         // 外部格式
+                 GL_FLOAT,                   // 外部数据类型
+                 nullptr);  
+    // 过滤器：阴影图必须 NEAREST
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // 环绕方式 + 边界颜色
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    const float border[4] = {1.0f, 1.0f, 1.0f, 1.0f};   // ★ 边界 = "最远深度"
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+
+    // 创建 FBO
+    glGenFramebuffers(1, &shadowFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER,
+                           GL_DEPTH_ATTACHMENT,   // ★ 挂在深度附件位置
+                           GL_TEXTURE_2D, depthTex, 0);
+    // ★★ 必须的两行：告诉 GL "这个 FBO 没有颜色附件"
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+    // 检查完整性（这一步千万别省，FBO 不完整时渲染是"静默失效"）
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cout << "Shadow FBO incomplete!" << std::endl;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);   // 回到默认帧缓冲（窗口）
+}
+
+
 
 OpenGLRenderer::~OpenGLRenderer() {
     // ---------------------------------------------------------------
@@ -19,7 +92,9 @@ glm::vec2 OpenGLRenderer::GetWindowSize() {
 
 
 bool OpenGLRenderer::Init() {
-    return CreateWindow();
+    if (!CreateWindow()) return false;
+    InitShadowPass();
+    return true;
 }
 
 bool OpenGLRenderer::CreateWindow() {
@@ -149,11 +224,49 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
 
 
     glEnable(GL_MULTISAMPLE);  // 开启多重采样
-    // BasePass
+
+    // ================================= ShadowPass ===========================================
+    // ---- ① 切到 shadow RT ----
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+    glViewport(0, 0, 1024, 1024);   // ★ 视口必须跟着变小
+    glDepthMask(GL_TRUE);              // ★ 加这两行
+    mRenderState.depthWrite = true;    // ★ 同步缓存，否则主 Pass 的状态比较会失真
+    mRenderState.depthTest = true;
+    glEnable(GL_DEPTH_TEST);
+    // ---- ② 清深度（不用清颜色，因为根本没有颜色附件）----
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    // ---- ③ 用深度专用 shader，画所有"投影者" ----
+    mShadowShader->Use();
+    for (const RenderCommand& cmd : RenderingCommandQueue) {
+
+        if(cmd.material->renderState.blend != BlendMode::Opaque) continue;  // 跳过透明物体
+
+        glm::mat4 model = TransformToModelMatrix(cmd.transform);       // 你现在那套 T→R→S
+        // ★ 复用 SetMatrix：把"灯光的 V/P"当 View/Projection 传进去
+        mShadowShader->SetMatrix(model, lightView, lightProjection);
+
+
+        cmd.mesh->Draw();
+    }
+    // ---- ④ 切回来 + 恢复视口 ----
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);            // ★★ 忘了这句，主画面只画在左下角一小块
+
+
+    // ================================= BasePass ===========================================
     for (auto& command : RenderingCommandQueue) {
         // 获取着色器
         // 对象用 . , 指针用 ->
         command.material->GetShader()->Use();         // 使用着色器程序
+
+        // 传递阴影相关
+        glActiveTexture(GL_TEXTURE0);                          // ② 绑到 0 号纹理单元
+        glBindTexture(GL_TEXTURE_2D, depthTex);
+        command.material->GetShader()->SetInt("shadowMap", 0); // ③ 告诉采样器用 0 号单元
+        command.material->GetShader()->SetMat4("lightSpaceMatrix",
+                                               lightProjection * lightView);  // ④ 传灯空间矩阵
+
 
         // 设置渲染状态
         ApplyRenderState(command.material->renderState);
@@ -169,8 +282,12 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
 
         // 设置 MVP 矩阵
         command.material->GetShader()->SetMatrix(modelMatrix, ViewMatrix, ProjectionMatrix);  // 设置 MVP 矩阵
-        command.material->GetShader()->SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
+        command.material->GetShader()->SetLight(lightPos,glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
         command.material->GetShader()->SetCamera(RenderingCameraData.position); // 设置相机位置
+
+
+
+
         command.mesh->Draw();                     // 绘制网格
 
     }

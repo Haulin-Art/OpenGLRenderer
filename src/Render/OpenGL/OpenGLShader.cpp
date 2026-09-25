@@ -127,3 +127,11 @@ void OpenGLShader::SetCamera(const glm::vec3& cameraPos)
 {
     glUniform3fv(glGetUniformLocation(m_ID, "CameraPos"), 1, glm::value_ptr(cameraPos));
 }
+
+// Shadow Pass 嵌入式
+void OpenGLShader::SetMat4(const std::string& name, const glm::mat4& value) {
+    glUniformMatrix4fv(glGetUniformLocation(m_ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+}
+void OpenGLShader::SetInt (const std::string& name, int value) {
+    glUniform1i(glGetUniformLocation(m_ID, name.c_str()), value);
+}

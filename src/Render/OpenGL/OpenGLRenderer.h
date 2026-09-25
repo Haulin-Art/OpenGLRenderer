@@ -40,8 +40,12 @@ class OpenGLRenderer : public IRenderer {
         // 执行渲染队列命令
         void ExecuteRenderCommands(const std::vector<RenderCommand>& RenderingCommandQueue,const CameraData& RenderingCameraData) override;
 
+        // 初始化ShadowPass
+        void InitShadowPass();
+
 
     private:
+
         const int WINDOW_WIDTH = 800;
         const int WINDOW_HEIGHT = 600;
         bool CreateWindow();
@@ -55,4 +59,14 @@ class OpenGLRenderer : public IRenderer {
         GLenum RenderStateToOpenGL(DepthFunc f);
         GLenum RenderStateToOpenGL(CullMode m);
         GLenum RenderStateToOpenGL(BlendMode b);
+
+
+        // 阴影贴图相关
+        // 这里后续添加阴影贴图渲染逻辑
+        const glm::vec3 lightPos = glm::vec3(2.0f, 4.0f, 0.8f);   // 你现在写死的那个方向
+        glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 30.0f); // 正交投影矩阵
+        glm::mat4 lightView = glm::lookAt(glm::vec3(2.0f, 4.0f, 0.8f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // 视图矩阵
+        OpenGLShader* mShadowShader = nullptr; // 阴影贴图着色器
+        GLuint depthTex = 0; // 阴影贴图纹理ID， 一个可以画的地方
+        GLuint shadowFBO = 0; // 阴影贴图FBO ID，OpenGL 里实现 RT 的对象（一个容器）
 };

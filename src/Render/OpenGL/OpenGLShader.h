@@ -25,6 +25,10 @@ class OpenGLShader : public IShader {
         void SetCamera(const glm::vec3& cameraPos) override; // 设置摄像机相关Uniform
         bool BuildFromFiles(const std::string& vertexPath, const std::string& fragmentPath);
 
+        // Shadow Pass 嵌入式
+        void SetMat4(const std::string& name, const glm::mat4& value) override;
+        void SetInt (const std::string& name, int value) override;
+        
     private:
         unsigned int m_ID = 0; // 着色器程序ID
         const std::string mVertexPath;   // 顶点着色器文件路径

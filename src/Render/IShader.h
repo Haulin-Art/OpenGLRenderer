@@ -13,4 +13,8 @@ class IShader{
         virtual void SetMatrix(const glm::mat4& ModeMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix) = 0; // 设置MVP矩阵Uniform
         virtual void SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor) = 0; // 设置灯光Uniform
         virtual void SetCamera(const glm::vec3& cameraPos) = 0; // 设置摄像机相关Uniform
+
+        // Shadow Pass 嵌入式
+        virtual void SetMat4(const std::string& name, const glm::mat4& value) = 0;
+        virtual void SetInt (const std::string& name, int value) = 0;
 };
