@@ -51,6 +51,10 @@ void main()
     //
     //   ★ 关掉 SSGI 时 SSGIPass 会把纹理清成 0 → indirect = 0
     //     → 这一行退化成原来的 `0.2 * ao`，和加 SSGI 之前【逐像素一致】。
-    vec3 ambient = vec3(0.2) + indirect;
-    fragColor = vec4((diffuse * shadow * 0.8 + ambient * ao)* baseColor, 1.0);
+    vec3 ambient = vec3(0.2) + indirect*1.0;
+
+    vec3 cc = mix(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),step(0.0,(fract(posWS.x*0.25)-0.5)*(fract(posWS.z*0.25)-0.5)));
+    cc = baseColor == vec3(1.0,0.0,0.0) ? cc : vec3(1.0);
+
+    fragColor = vec4((diffuse * shadow * 0.8 + ambient * ao)* cc, 1.0);
 }

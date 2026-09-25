@@ -33,7 +33,9 @@ void main()
     // ★ 存的是"材质是什么颜色"，不是"这个像素看起来多亮"：
     //   受光、阴影、AO 都还没乘进来。SSGI 拿它当"命中点把光反射成什么颜色"，
     //   乘完再交给 BasePass，最终结果里 albedo 只被乘一次。
-    gAlbedo = vec4(baseColor, 1.0);
+    vec3 cc = mix(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),step(0.0,(fract(vWorldPos.x*0.25)-0.5)*(fract(vWorldPos.z*0.25)-0.5)));
+    cc = baseColor == vec3(1.0,0.0,0.0) ? cc : vec3(1.0);
+    gAlbedo = vec4(cc, 1.0);
 
     // 另一种常见写法是存「视图空间线性深度」-z：
     //     gDepth = -(ViewMatrix * vec4(vWorldPos, 1.0)).z;
