@@ -129,8 +129,7 @@ int main(){
     renderQueueManager.Submit(RenderCommand(plane2, &material, Transform(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(3.0f, 1.0f, 3.0f))));
     // 获取摄像机数据
     CameraData renderingCameraData = camera.GetCameraData();
-    // 渲染队列排序
-    renderQueueManager.Sort(renderingCameraData.position);
+
 
     // ---------------------------------------------------------------
     // 【第 6 步】渲染主循环
@@ -138,6 +137,12 @@ int main(){
 
         // 处理所有窗口事件（键盘输入、鼠标移动等）
         renderer->PollEvents();
+
+        // ★ 每帧把窗口尺寸同步给相机
+        //   视口（glViewport）每帧都跟着窗口变，投影矩阵的 aspect 也必须跟着变；
+        //   只在启动时设一次的话，一旦窗口比例改变（拖边框），画面就会被拉伸变形
+        camera.SetViewportSize(renderer->GetWindowSize());
+
         camera.mouseX += 1.0;
         camera.Update();
         renderingCameraData = camera.GetCameraData();
@@ -156,6 +161,7 @@ int main(){
     // 释放资源
     delete mesh;
     delete plane;
+    delete plane2;
     delete shader;
     delete planeShader;
     delete renderer;

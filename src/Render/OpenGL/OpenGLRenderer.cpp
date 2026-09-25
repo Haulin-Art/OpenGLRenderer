@@ -2,9 +2,6 @@
 
 OpenGLRenderer::OpenGLRenderer(const int width, const int height) : WINDOW_WIDTH(width), WINDOW_HEIGHT(height) {
 
-
-
-
 }
 
 void OpenGLRenderer::InitShadowPass(){
@@ -21,8 +18,8 @@ void OpenGLRenderer::InitShadowPass(){
 
     // 方向光（平行光）用正交投影
     lightProjection = glm::ortho(
-        -10.0f, 10.0f,      // ★ 必须恰好包住要投影的场景
-        -10.0f, 10.0f,
+        -5.0f, 5.0f,      // ★ 必须恰好包住要投影的场景
+        -5.0f, 5.0f,
          1.0f,              // ★ near 不能是 0！否则灯背后的东西会被"投影"进来
         30.0f);
 
@@ -34,16 +31,16 @@ void OpenGLRenderer::InitShadowPass(){
     //glm::mat4 lightSpaceMatrix = GetLightSpaceMatrix(lightPos, lightDir);
 
     // 建立阴影贴图的 FBO 和纹理
-    //GLuint depthTex = 0;  // 一个可以画的地方
+    //GLuint shadowTex01 = 0;  // 一个可以画的地方
     //GLuint shadowFBO = 0;  // OpenGL 里实现 RT 的对象（一个容器）
     //  附件（attachment）， FBO 上挂的缓冲：颜色 / 深度 / 模板
     // RT 包含 Buffer（缓冲区），Buffer 包含 Texture（纹理）或 Renderbuffer（渲染缓冲）
-    glGenTextures(1, &depthTex); // 这里的 1 表示生成 1 个纹理对象，depthTex 是 GLuint 类型的纹理 ID
-    glBindTexture(GL_TEXTURE_2D, depthTex); // 这里绑定纹理对象，后续的纹理操作都会作用在这个纹理上
+    glGenTextures(1, &shadowTex01); // 这里的 1 表示生成 1 个纹理对象，depthTex 是 GLuint 类型的纹理 ID
+    glBindTexture(GL_TEXTURE_2D, shadowTex01); // 这里绑定纹理对象，后续的纹理操作都会作用在这个纹理上
     glTexImage2D(GL_TEXTURE_2D,
                  0,                          // mip 级别
                  GL_DEPTH_COMPONENT24,       // ★ 内部格式：只要深度，24 位
-                 1024, 1024,   // 1024 或 2048
+                 shadowMapSize, shadowMapSize,   // 1024 或 2048
                  0,                          // 边框（必须 0）
                  GL_DEPTH_COMPONENT,         // 外部格式
                  GL_FLOAT,                   // 外部数据类型
@@ -62,7 +59,7 @@ void OpenGLRenderer::InitShadowPass(){
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
     glFramebufferTexture2D(GL_FRAMEBUFFER,
                            GL_DEPTH_ATTACHMENT,   // ★ 挂在深度附件位置
-                           GL_TEXTURE_2D, depthTex, 0);
+                           GL_TEXTURE_2D, shadowTex01, 0);
     // ★★ 必须的两行：告诉 GL "这个 FBO 没有颜色附件"
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
@@ -83,11 +80,25 @@ OpenGLRenderer::~OpenGLRenderer() {
     // glfwTerminate 释放 GLFW 占用的所有资源（窗口、上下文等）。
     // 返回 0 表示程序正常结束。
     // ---------------------------------------------------------------
+    // 清理资源
+    // ★ GL 对象的删除必须在 glfwTerminate() 之前（此刻上下文还活着）
+    //   FBO 和纹理是两个独立对象，要分别删：
+    //   glDeleteFramebuffers 只删"容器"，不会连带删掉它挂着的纹理
+    if (shadowFBO) glDeleteFramebuffers(1, &shadowFBO);
+    if (shadowTex01)  glDeleteTextures(1, &shadowTex01);
+    delete mShadowShader;  // 内部会 glDeleteProgram
     glfwTerminate();
 }
 
 glm::vec2 OpenGLRenderer::GetWindowSize() {
-    return glm::vec2(WINDOW_WIDTH, WINDOW_HEIGHT);
+    // ★ 实时查询「framebuffer 像素尺寸」，不要缓存成成员变量：
+    //   1) glViewport 要的是「像素」，不是逻辑窗口尺寸
+    //      （显示缩放 != 100% 时，glfwGetWindowSize 和 glfwGetFramebufferSize 不相等）
+    //   2) 一旦缓存，resize 之后拿到的就是过期值
+    if (!window) return glm::vec2(0.0f);   // Init() 之前调用要保护
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(window, &w, &h);
+    return glm::vec2(static_cast<float>(w), static_cast<float>(h));
 }
 
 
@@ -228,7 +239,7 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
     // ================================= ShadowPass ===========================================
     // ---- ① 切到 shadow RT ----
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
-    glViewport(0, 0, 1024, 1024);   // ★ 视口必须跟着变小
+    glViewport(0, 0, shadowMapSize, shadowMapSize);   // ★ 视口必须跟着变小
     glDepthMask(GL_TRUE);              // ★ 加这两行
     mRenderState.depthWrite = true;    // ★ 同步缓存，否则主 Pass 的状态比较会失真
     mRenderState.depthTest = true;
@@ -251,8 +262,14 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
     }
     // ---- ④ 切回来 + 恢复视口 ----
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);            // ★★ 忘了这句，主画面只画在左下角一小块
+    // ★ 恢复视口：用 framebuffer 的真实像素尺寸
+    //   （窗口被拉伸后，每次都要按新尺寸设视口，否则主 Pass 会画在错误区域）
+    const glm::vec2 fbSize = GetWindowSize();
+    glViewport(0, 0, static_cast<int>(fbSize.x), static_cast<int>(fbSize.y));
+    
+    // ================================= AO =================================================
 
+    // ================================= Background =========================================
 
     // ================================= BasePass ===========================================
     for (auto& command : RenderingCommandQueue) {
@@ -262,11 +279,10 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
 
         // 传递阴影相关
         glActiveTexture(GL_TEXTURE0);                          // ② 绑到 0 号纹理单元
-        glBindTexture(GL_TEXTURE_2D, depthTex);
+        glBindTexture(GL_TEXTURE_2D, shadowTex01);
         command.material->GetShader()->SetInt("shadowMap", 0); // ③ 告诉采样器用 0 号单元
         command.material->GetShader()->SetMat4("lightSpaceMatrix",
                                                lightProjection * lightView);  // ④ 传灯空间矩阵
-
 
         // 设置渲染状态
         ApplyRenderState(command.material->renderState);
@@ -285,13 +301,17 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
         command.material->GetShader()->SetLight(lightPos,glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
         command.material->GetShader()->SetCamera(RenderingCameraData.position); // 设置相机位置
 
-
-
-
         command.mesh->Draw();                     // 绘制网格
 
     }
+    // 解绑纹理
+    glBindTexture(GL_TEXTURE_2D, 0);
     //RenderCommandQueue.clear();
+
+    // ================================ Post Prccessing ============================================
+    
+    // -------------------------------- SSRT -------------------------------------------------------
+    // -------------------------------- Color Gradient ---------------------------------------------
 }
 
 void OpenGLRenderer::ApplyRenderState(const RenderState& renderState) {

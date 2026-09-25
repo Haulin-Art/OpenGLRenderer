@@ -21,19 +21,3 @@ inline glm::mat4 TransformToModelMatrix(const Transform& transform){
     modelMatrix = glm::scale(modelMatrix, transform.scale);
     return modelMatrix;
 }
-inline glm::mat4 GetLightSpaceViewMatrix(const glm::vec3& lightPos, const glm::vec3& lightDir){
-    glm::mat4 lightView = glm::lookAt(
-        lightPos,                            // 灯在哪
-        glm::vec3(0.0f),                     // 看向哪
-        glm::vec3(0.0f, 1.0f, 0.0f));        // 上方向
-
-    return lightView;
-}
-inline glm::mat4 GetLightSpaceProjectionMatrix(const glm::vec3& lightPos, const glm::vec3& lightDir){
-    glm::mat4 lightProjection = glm::ortho(
-        -10.0f, 10.0f,      // ★ 必须恰好包住要投影的场景
-        -10.0f, 10.0f,
-         1.0f,              // ★ near 不能是 0！否则灯背后的东西会被"投影"进来
-        30.0f);
-    return lightProjection;
-}

@@ -79,6 +79,6 @@ void main()
 
     float shadowPCF = ShadowFactorPCF(posWS, 0.002, 2.0);   // ← PCF 版本
 
-    fragColor = vec4(diffuse*shadowPCF, 1.0); // 将顶点颜色传递给帧缓冲
+    fragColor = vec4(diffuse*shadowPCF*0.8+0.2, 1.0); // 将顶点颜色传递给帧缓冲
     //fragColor = vec4(vec3(shadow), 1.0); // 将顶点颜色传递给帧缓冲
 }
