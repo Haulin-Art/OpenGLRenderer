@@ -1,11 +1,7 @@
-// ============================================
-// Mesh.cpp — Mesh 类的实现
-// ============================================
-
-#include "Mesh.h"
+#include "OpenGLMesh.h"
 
 // ---- 构造函数: 所有 GPU 句柄初始化为 0（无效状态） ----
-Mesh::Mesh()
+OpenGLMesh::OpenGLMesh()
     : VAO(0), VBO(0), EBO(0), mIndexCount(0)
 {
 }
@@ -16,7 +12,7 @@ Mesh::Mesh()
 //   glDeleteBuffers(1, &VBO);
 //   glDeleteBuffers(1, &EBO);
 // 参数 1 表示"删除 1 个对象"
-Mesh::~Mesh()
+OpenGLMesh::~OpenGLMesh()
 {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
@@ -25,12 +21,12 @@ Mesh::~Mesh()
 
 // ---- 上传数据到 GPU ----
 // 函数重载，可以选择直接输入数据，或者输入ObjMeshData
-void Mesh::setData(const float* vertices, int vertexCount,
+void OpenGLMesh::SetData(const float* vertices, int vertexCount,
                    const unsigned int* indices, int indexCount)
 {
     setDataInternal(vertices, vertexCount, indices, indexCount);
 }
-void Mesh::setData(const ObjMeshData& objMeshData)
+void OpenGLMesh::SetData(const ObjMeshData& objMeshData)
 {
     setDataInternal(objMeshData.vertices.data(),                   // 顶点数组
                  static_cast<int>(objMeshData.vertices.size()), // 顶点数
@@ -40,7 +36,7 @@ void Mesh::setData(const ObjMeshData& objMeshData)
 
 
 // ============================================
-// setData — 上传顶点和索引数据到 GPU 显存
+// SetData — 上传顶点和索引数据到 GPU 显存
 //
 // 这是 GPU 渲染的前置步骤。数据上传后存储在显存中，
 // 后续每次 draw() 都直接使用显存里的数据，不再经过 CPU。
@@ -48,7 +44,7 @@ void Mesh::setData(const ObjMeshData& objMeshData)
 // GL_STATIC_DRAW: 告诉 GPU 驱动"这些数据不会频繁修改"，
 // 驱动可以把它们放在读取速度最快的显存区域。
 // ============================================
-void Mesh::setDataInternal(const float* vertices, int vertexCount,
+void OpenGLMesh::setDataInternal(const float* vertices, int vertexCount,
                    const unsigned int* indices, int indexCount)
 {
     mIndexCount = indexCount;  // 保存索引数量，供 draw() 使用
@@ -149,7 +145,7 @@ void Mesh::setDataInternal(const float* vertices, int vertexCount,
 // GPU 会: 顶点着色器(24顶点) → 光栅化(12三角形) → 片段着色器(所有覆盖的像素)
 // 这一切都在显卡硬件上并行完成
 // ============================================
-void Mesh::draw() const
+void OpenGLMesh::Draw() const
 {
     // 绑定 VAO — 恢复所有顶点属性设置
     glBindVertexArray(VAO);

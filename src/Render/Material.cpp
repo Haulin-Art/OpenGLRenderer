@@ -1,9 +1,9 @@
 #include "Material.h"
 
-Material::Material(Shader* shader) : m_Shader(shader) {
+Material::Material(IShader* shader) : m_Shader(shader) {
 }
 Material::~Material() {
 }
-void Material::SetShader(Shader* shader) {
+void Material::SetShader(IShader* shader) {
     m_Shader = shader;
 }

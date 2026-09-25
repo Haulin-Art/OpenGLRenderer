@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Shader.h"
+#include "IShader.h"
 
 #include <tuple>
 enum class DepthFunc { Never, Less, Equal, LessEqual, Greater, NotEqual, GreaterEqual, Always };
@@ -19,6 +19,8 @@ struct RenderState {
     CullMode  cullMode   = CullMode::Off;
     BlendMode blend      = BlendMode::Opaque;
     // 排序依据
+    // 排序要做到两点，一是半透明必须排在所有不透明之后，二是 同 shader / 同状态 的物体连在一起画。
+    // 优先级：是否透明 》 shader分组 》渲染状态分组 》距离
     bool operator<(const RenderState& o) const {
         return std::tie(depthTest, depthWrite, depthFunc, cullMode, blend)
              < std::tie(o.depthTest, o.depthWrite, o.depthFunc, o.cullMode, o.blend);
@@ -27,13 +29,13 @@ struct RenderState {
 
 class Material {
     public:
-        Material(Shader* shader);
+        Material(IShader* shader);
         ~Material();
 
-        void SetShader(Shader* shader);
-        Shader* GetShader() const { return m_Shader; }
+        void SetShader(IShader* shader);
+        IShader* GetShader() const { return m_Shader; }
         RenderState renderState;
 
     private:
-        Shader* m_Shader = nullptr;
+        IShader* m_Shader = nullptr;
 };

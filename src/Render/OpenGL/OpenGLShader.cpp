@@ -1,25 +1,24 @@
-#include "Shader.h"
+#include "OpenGLShader.h"
 
 // 构造函数
-Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath)
-    : mVertexPath(vertexPath), mFragmentPath(fragmentPath)  // 使用成员初始化列表初始化常量成员变量
+OpenGLShader::OpenGLShader()
 {
-   buildFromFiles(mVertexPath,mFragmentPath);
+   //BuildFromFiles(mVertexPath,mFragmentPath);
 }
 
-Shader::~Shader()
+OpenGLShader::~OpenGLShader()
 {
-    if(ID!=0) glDeleteProgram(ID);
+    if(m_ID!=0) glDeleteProgram(m_ID);
 }
 
 // 构建并使用
-void Shader::Use()
+void OpenGLShader::Use()
 {
-    glUseProgram(ID);
+    glUseProgram(m_ID);
 }
 
 // Shader
-bool Shader::buildFromFiles(const std::string& vertexPath, const std::string& fragmentPath)
+bool OpenGLShader::BuildFromFiles(const std::string& vertexPath, const std::string& fragmentPath)
 {
     // 读取顶点着色器源码
     std::string vertexSource = readShaderFile(vertexPath);
@@ -41,17 +40,17 @@ bool Shader::buildFromFiles(const std::string& vertexPath, const std::string& fr
     unsigned int fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
 
     // 创建着色器程序并链接
-    ID = glCreateProgram();
-    glAttachShader(ID, vertexShader);
-    glAttachShader(ID, fragmentShader);
-    glLinkProgram(ID);
+    m_ID = glCreateProgram();
+    glAttachShader(m_ID, vertexShader);
+    glAttachShader(m_ID, fragmentShader);
+    glLinkProgram(m_ID);
 
     // 检查链接是否成功
     int success;
-    glGetProgramiv(ID, GL_LINK_STATUS, &success);
+    glGetProgramiv(m_ID, GL_LINK_STATUS, &success);
     if (!success) {
         char infoLog[512];
-        glGetProgramInfoLog(ID, 512, nullptr, infoLog);
+        glGetProgramInfoLog(m_ID, 512, nullptr, infoLog);
         std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
         return false;
     }
@@ -66,7 +65,7 @@ bool Shader::buildFromFiles(const std::string& vertexPath, const std::string& fr
 // ============================ 读取着色器文件函数 ============================
 // const 表示参数 path 是只读的，函数内部不能修改它。
 // & 表示按引用传递，避免拷贝 std::string 对象（节省性能）
-std::string Shader::readShaderFile(const std::string& path)
+std::string OpenGLShader::readShaderFile(const std::string& path)
 {
     std::ifstream f(path); // 打开文件，打开这个文件，接入“水管”
     if (!f.is_open()) { // 如果文件没打开成功
@@ -83,7 +82,7 @@ std::string Shader::readShaderFile(const std::string& path)
 // ============================ 编译着色器函数 ============================
 // unsigned int 是无符号整数类型，GLenum 是 OpenGL 自己定义的一种整数代号。
 // GLenum: OpenGL 自己定义的一种整数代号。说白了就是：0x8B31 代表顶点，0x8B30 代表片段（人看不懂，所以起了个别名 GLenum）。你传进来告诉它"我要编译哪种 shader"。
-unsigned int Shader::compileShader(GLenum shaderType, const std::string& shaderSource)
+unsigned int OpenGLShader::compileShader(GLenum shaderType, const std::string& shaderSource)
 {
     // 编译 Shader 的步骤：
     // 1. 创建一个 shader 对象，返回它的 ID（工牌号
@@ -109,22 +108,22 @@ unsigned int Shader::compileShader(GLenum shaderType, const std::string& shaderS
 }
 
 // 设置MVP矩阵Uniform
-void Shader::SetMatrix(const glm::mat4& ModelMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix)
+void OpenGLShader::SetMatrix(const glm::mat4& ModelMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix)
 {
-    glUniformMatrix4fv(glGetUniformLocation(ID, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(ModelMatrix));
-    glUniformMatrix4fv(glGetUniformLocation(ID, "ViewMatrix"), 1, GL_FALSE, glm::value_ptr(ViewMatrix));
-    glUniformMatrix4fv(glGetUniformLocation(ID, "ProjectionMatrix"), 1, GL_FALSE, glm::value_ptr(ProjectionMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(m_ID, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(ModelMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(m_ID, "ViewMatrix"), 1, GL_FALSE, glm::value_ptr(ViewMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(m_ID, "ProjectionMatrix"), 1, GL_FALSE, glm::value_ptr(ProjectionMatrix));
 }
 
 // 设置Light Uniform
-void Shader::SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor)
+void OpenGLShader::SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor)
 {
-    glUniform3fv(glGetUniformLocation(ID, "mainLightPos"), 1, glm::value_ptr(lightPos));
-    glUniform3fv(glGetUniformLocation(ID, "mainLightColor"), 1, glm::value_ptr(lightColor));
+    glUniform3fv(glGetUniformLocation(m_ID, "mainLightPos"), 1, glm::value_ptr(lightPos));
+    glUniform3fv(glGetUniformLocation(m_ID, "mainLightColor"), 1, glm::value_ptr(lightColor));
 }
 
 // 设置Camera Uniform
-void Shader::SetCamera(const glm::vec3& cameraPos)
+void OpenGLShader::SetCamera(const glm::vec3& cameraPos)
 {
-    glUniform3fv(glGetUniformLocation(ID, "CameraPos"), 1, glm::value_ptr(cameraPos));
+    glUniform3fv(glGetUniformLocation(m_ID, "CameraPos"), 1, glm::value_ptr(cameraPos));
 }

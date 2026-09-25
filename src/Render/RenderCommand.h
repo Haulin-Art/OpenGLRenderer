@@ -3,8 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>   // glm::value_ptr，传给 glUniformMatrix4fv 用
 
-#include "Mesh.h"
-#include "Shader.h"
+#include "IMesh.h"
 #include "Material.h"
 
 // 物体的变换
@@ -15,7 +14,7 @@ struct Transform {
 };
 // 最小渲染命令块
 struct RenderCommand {
-    Mesh* mesh;
+    IMesh* mesh;
     Material* material;
     Transform transform;
 };

@@ -1,20 +1,10 @@
-// # 继承 Renderer，真正调用 glDraw
 #pragma once
 #include "Renderer.h"
 
-#include "OpenGLShader.h"
-#include "OpenGLMesh.h"
-
-#include <iostream>
-#include <glad/glad.h>   // 这个得在GLFW之前引入，因为GLFW会使用OpenGL函数指针，而这些指针是由glad加载的
-#include <GLFW/glfw3.h>  
-
-class OpenGLRenderer : public IRenderer {
+class VulkanRenderer : public IRenderer {
     public:
-        GLFWwindow* window = nullptr;
-
-        OpenGLRenderer(const int width, const int height);
-        ~OpenGLRenderer();
+        VulkanRenderer(int width, int height);
+        ~VulkanRenderer() override;
 
         // 数据相关
         glm::vec2 GetWindowSize() override;
@@ -40,19 +30,7 @@ class OpenGLRenderer : public IRenderer {
         // 执行渲染队列命令
         void ExecuteRenderCommands(const std::vector<RenderCommand>& RenderingCommandQueue,const CameraData& RenderingCameraData) override;
 
-
     private:
         const int WINDOW_WIDTH = 800;
         const int WINDOW_HEIGHT = 600;
-        bool CreateWindow();
-
-        // 将 IRenderer 当中的 BuiltInRendererFeatures 转换为 OpenGL 的 GLenum
-        GLenum ConvertBuiltInRendererFeaturesToGLenum(BuiltInRendererFeatures feature);
-
-        // 设置渲染状态
-        RenderState mRenderState;
-        void ApplyRenderState(const RenderState& renderState);
-        GLenum RenderStateToOpenGL(DepthFunc f);
-        GLenum RenderStateToOpenGL(CullMode m);
-        GLenum RenderStateToOpenGL(BlendMode b);
 };

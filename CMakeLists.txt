@@ -12,18 +12,9 @@ find_package(OpenGL REQUIRED)
 #       调用它的地方会在链接阶段报 undefined reference。
 # 按架构分层分组，新增文件时对号入座即可。
 add_executable(OpenGLRenderer
-    # ---- 基础 / 工具 ----
-    src/config.h
     src/main.cpp
     src/ObjLoader.h
-    src/ObjLoader.cpp
-
-    # ---- 渲染资源（按目标架构，日后迁往 Render/OpenGL 与 Resources）----
-    src/Shader.h
-    src/Shader.cpp
-    src/Mesh.h
-    src/Mesh.cpp
-    src/RenderObject.h                              # 临时结构，最终由 Scene 层取代
+    src/ObjLoader.cpp                              # 临时结构，最终由 Scene 层取代
 
     # ---- Render: 渲染核心层（与图形 API 无关）----
     src/Render/RenderCommand.h                      # Transform + RenderCommand
@@ -36,6 +27,18 @@ add_executable(OpenGLRenderer
     # ---- Render/OpenGL: 具体 API 实现 ----
     src/Render/OpenGL/OpenGLRenderer.h              # 唯一允许出现 gl* / glfw* 的地方
     src/Render/OpenGL/OpenGLRenderer.cpp
+    src/Render/IShader.h
+    src/Render/OpenGL/OpenGLShader.h
+    src/Render/OpenGL/OpenGLShader.cpp
+    src/Render/IMesh.h
+    src/Render/OpenGL/OpenGLMesh.h
+    src/Render/OpenGL/OpenGLMesh.cpp
+    src/config.h
+    src/Render/RendererFactory.h
+    src/Render/RendererFactory.cpp
+    src/Render/Vulkan/VulkanRenderer.h
+    src/Render/RenderQueue.h
+    src/Render/RenderQueue.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件

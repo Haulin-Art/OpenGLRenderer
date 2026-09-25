@@ -52,7 +52,7 @@ bool OpenGLRenderer::CreateWindow() {
     // 参数依次为: 宽、高、窗口标题、监视器(NULL=窗口模式)、共享上下文(NULL=不共享)。
     // 返回 NULL 表示创建失败，此时先终止 GLFW 再退出。
     // ---------------------------------------------------------------
-    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "OpenGL Window", NULL, NULL);
+    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Lynn Renderer", NULL, NULL);
     if (!window) {
         std::cout << "Failed to create window" << std::endl;
         glfwTerminate();
@@ -123,6 +123,9 @@ void OpenGLRenderer::DisableRendererFeature(BuiltInRendererFeatures feature)  {
     glDisable(ConvertBuiltInRendererFeaturesToGLenum(feature));
 }
 
+void OpenGLRenderer::WindowTerminate() {
+    glfwTerminate();
+}
 
 
 // 设置清屏颜色
@@ -134,10 +137,6 @@ void OpenGLRenderer::Clear() {
     glDepthMask(GL_TRUE);
     mRenderState.depthWrite = true;   // 改了 GL 状态，这里如果不重新设置开启，当绘制关闭了深度写入的透明物体后，深度缓存会失效，缓存必须同步（否则又会不一致）
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-}
-
-void OpenGLRenderer::Render(Mesh* mesh, Shader* shader, glm::mat4& transform) {
-    
 }
 
 // 渲染队列
@@ -172,7 +171,7 @@ void OpenGLRenderer::ExecuteRenderCommands(const std::vector<RenderCommand>& Ren
         command.material->GetShader()->SetMatrix(modelMatrix, ViewMatrix, ProjectionMatrix);  // 设置 MVP 矩阵
         command.material->GetShader()->SetLight(glm::vec3(0.5f, 1.0f, 0.2f),glm::vec3(1.0f, 1.0f, 1.0f)); // 设置光源
         command.material->GetShader()->SetCamera(RenderingCameraData.position); // 设置相机位置
-        command.mesh->draw();                     // 绘制网格
+        command.mesh->Draw();                     // 绘制网格
 
     }
     //RenderCommandQueue.clear();
@@ -257,3 +256,12 @@ GLenum OpenGLRenderer::RenderStateToOpenGL(BlendMode m) {
     }
     return GL_ONE;
 }
+
+// 相关资源创建
+IShader* OpenGLRenderer::CreateShader() {
+    return new OpenGLShader();
+}
+IMesh* OpenGLRenderer::CreateMesh() {
+    return new OpenGLMesh();
+}
+

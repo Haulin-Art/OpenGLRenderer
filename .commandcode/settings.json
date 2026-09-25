@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Shell(cmake:*)"
+      "Shell(cmake:*)",
+      "Shell(D:/Document/GitHub/Dev/CPP/w64devkit/bin/cmake.exe:*)",
+      "Shell(for:*)",
+      "Shell(buildOpenGLRenderer.exe:*)",
+      "Shell(do:*)",
+      "Shell(set:*)",
+      "Shell(cd /d D:\\Document\\GitHub\\OpenGLRenderer && dir /b && echo ---- && rmdir /s /q \"\\%SP\\%\" 2>nul & dir /b)",
+      "powershell",
+      "Shell(D:/Document/GitHub/OpenGLRenderer/build/OpenGLRenderer.exe:*)",
+      "Shell(tasklist:*)",
+      "Shell(findstr:*)",
+      "Shell(D:/Document/GitHub/Dev/CPP/w64devkit/bin/ccache-g++.exe:*)",
+      "Shell(D:/Document/GitHub/Dev/CPP/w64devkit/bin/nm.exe:*)",
+      "Shell(OpenGLRenderer.exe:*)",
+      "Shell(cd /d D:\\Document\\GitHub\\OpenGLRenderer && set IDIRS=-Isrc -Isrc/Render -Isrc/Render/Camera -Isrc/Render/OpenGL -Idependencies/glad/include -Idependencies/glm -Idependencies/tinyobjloader && echo [main.cpp 里看到的宏] && \"D:/Document/GitHub/Dev/CPP/w64devkit/bin/ccache-g++.exe\" -dM -E -DPROJECT_SOURCE_DIR=\"x\" %IDIRS% src/main.cpp 2>nul | findstr /i OPENGL_RENDERER & echo [OpenGLRenderer.cpp 里看到的宏] && \"D:/Document/GitHub/Dev/CPP/w64devkit/bin/ccache-g++.exe\" -dM -E -DPROJECT_SOURCE_DIR=\"x\" %IDIRS% src/Render/OpenGL/OpenGLRenderer.cpp 2>nul | findstr /i OPENGL_RENDERER & echo (上面若为空 = 该编译单元里没有这个宏))",
+      "Shell(srcmain.cpp:*)"
     ],
     "deny": [],
     "defaultMode": "default"

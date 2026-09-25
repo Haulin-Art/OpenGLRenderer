@@ -1,23 +1,22 @@
-#include "config.h"
-// config.h 里已经按顺序引入了:
-//   <iostream>      控制台输入输出
-//   <glad/glad.h>   OpenGL 函数加载器（必须放在 GLFW 之前）
-//   <GLFW/glfw3.h>  跨平台窗口/输入库
-//   <fstream>/<sstream>/<string>  文件与字符串工具
-// 注意 glad 必须在 glfw 之前引入，因为 GLFW 会用到 glad 提供的 OpenGL 函数指针。
+#include <iostream>
 
+#include "Camera.h"
+#include "Renderer.h"
+#include "RenderQueue.h"
+//#include "OpenGLRenderer.h"
 // ============================ 编译期常量 ============================
 // constexpr 是编译期常量，比 #define 更安全（有类型检查、有作用域）。
 // 这里定义窗口的初始宽高。
 constexpr int WINDOW_WIDTH = 800;
 constexpr int WINDOW_HEIGHT = 600;
 
-
 // ============================ 程序入口 ============================
 int main(){
     // ======================================== Renderer ======================================================
     // 创建窗口以及设置OpenGL上下文
-    IRenderer* renderer = new OpenGLRenderer(WINDOW_WIDTH, WINDOW_HEIGHT);
+    //IRenderer* renderer = new OpenGLRenderer(WINDOW_WIDTH, WINDOW_HEIGHT);
+    IRenderer* renderer = CreateRenderer(WINDOW_WIDTH, WINDOW_HEIGHT);
+    if (!renderer) { std::cerr << "创建渲染器失败：后端未编入？" << std::endl; return -1; }
     if (!renderer->Init()) {
         std::cout << "Failed to initialize renderer" << std::endl;
         return -1;
@@ -31,14 +30,16 @@ int main(){
     // 猴头
     std::string vsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicvertex.glsl";
     std::string fsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicfrag.glsl";
-    Shader shader(vsPath, fsPath);
-    Material material(&shader);
+    IShader* shader = renderer->CreateShader(); //
+    shader->BuildFromFiles(vsPath, fsPath);
+    Material material(shader);
     material.renderState.depthTest = true;
     // 平面Shader-半透明物体
     std::string vsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetVertex.glsl";
     std::string fsPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/groundNetFrag.glsl";
-    Shader planeShader(vsPath1, fsPath1);
-    Material planeMaterial(&planeShader);
+    IShader* planeShader = renderer->CreateShader();
+    planeShader->BuildFromFiles(vsPath1, fsPath1);
+    Material planeMaterial(planeShader);
     planeMaterial.renderState.blend = BlendMode::AlphaBlend;
     planeMaterial.renderState.depthTest = true;
     planeMaterial.renderState.depthWrite = false;
@@ -64,23 +65,23 @@ int main(){
     const std::string objPath = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/monkey.obj";
     if (!LoadObj(objPath, objMeshData)) {
         std::cerr << "加载 OBJ 失败: " << objPath << std::endl;
-        glfwTerminate();
+        renderer->WindowTerminate(); // 终止窗口
         return -1;
     }
-    // 建立网格并上传到 GPU（直接把加载结果喂给 setData）
-    Mesh mesh;
-    mesh.setData(objMeshData);
+    // 建立网格并上传到 GPU（直接把加载结果喂给 SetData）
+    IMesh* mesh = renderer->CreateMesh();
+    mesh->SetData(objMeshData);
     // 平面
     ObjMeshData objMeshData1;
     const std::string objPath1 = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/plane.obj";
     if (!LoadObj(objPath1, objMeshData1)) {
         std::cerr << "加载 OBJ 失败: " << objPath1 << std::endl;
-        glfwTerminate();
+        renderer->WindowTerminate();  // 终止窗口
         return -1;
     }
-    // 建立网格并上传到 GPU（直接把加载结果喂给 setData）
-    Mesh plane;
-    plane.setData(objMeshData1);
+    // 建立网格并上传到 GPU（直接把加载结果喂给 SetData）
+    IMesh* plane = renderer->CreateMesh();
+    plane->SetData(objMeshData1);
 
 
     // ======================================= MVP矩阵 ================================================================
@@ -112,10 +113,13 @@ int main(){
     );
 
     // ==================================== 渲染队列 ===================================
-    std::vector<RenderCommand> renderQueue;
-    renderQueue.push_back(RenderCommand(&mesh, &material, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
-    renderQueue.push_back(RenderCommand(&plane, &planeMaterial, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
-
+    RenderQueue renderQueueManager;
+    renderQueueManager.Submit(RenderCommand(plane, &planeMaterial, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(100.0f, 1.0f, 100.0f))));
+    renderQueueManager.Submit(RenderCommand(mesh, &material, Transform(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f))));
+    // 获取摄像机数据
+    CameraData renderingCameraData = camera.GetCameraData();
+    // 渲染队列排序
+    renderQueueManager.Sort(renderingCameraData.position);
 
     // ---------------------------------------------------------------
     // 【第 6 步】渲染主循环
@@ -125,20 +129,24 @@ int main(){
         renderer->PollEvents();
         camera.mouseX += 1.0;
         camera.Update();
+        renderingCameraData = camera.GetCameraData();
 
-        // 开启深度测试
-        //renderer->EnableRendererFeature(BuiltInRendererFeatures::DepthTest);
-
+        // 渲染队列排序
+        renderQueueManager.Sort(renderingCameraData.position);
+        
         // 清空颜色缓冲（用 glClearColor 设置的颜色填充窗口）
         renderer->Clear();  // 清空颜色缓冲
 
         // 执行渲染命令
-        renderer->ExecuteRenderCommands(renderQueue, camera.GetCameraData());
-
+        renderer->ExecuteRenderCommands(renderQueueManager.Commands(), renderingCameraData);
 
         renderer->SwapBuffers(); // 交换前后缓冲区（把画好的内容显示到屏幕）
     }
-
+    // 释放资源
+    delete mesh;
+    delete plane;
+    delete shader;
+    delete planeShader;
     delete renderer;
 
     return 0;
