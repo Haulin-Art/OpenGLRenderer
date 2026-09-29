@@ -61,6 +61,64 @@ bool OpenGLShader::BuildFromFiles(const std::string& vertexPath, const std::stri
 
     return true;
 }
+bool OpenGLShader::BuildFromSource(const std::string& vertexSource, const std::string& fragmentSource){
+    
+    // 源码非空检查
+    if (vertexSource.empty()) {
+        std::cout << "Failed to read vertex source: " << std::endl;
+        return false;
+    }
+    if (fragmentSource.empty()) {
+        std::cout << "Failed to read fragment source: " << std::endl;
+        return false;
+    }
+
+    // 编译顶点着色器
+    unsigned int vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource);
+    // 编译片段着色器
+    unsigned int fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
+
+    // 创建着色器程序并链接
+    m_ID = glCreateProgram();
+    glAttachShader(m_ID, vertexShader);
+    glAttachShader(m_ID, fragmentShader);
+    glLinkProgram(m_ID);
+
+    // 检查链接是否成功
+    int success;
+    glGetProgramiv(m_ID, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetProgramInfoLog(m_ID, 512, nullptr, infoLog);
+        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+        return false;
+    }
+
+    // 删除着色器对象，它们已经链接到程序中，不再需要单独存在
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    return true;
+}
+
+bool OpenGLShader::BuildFromShaderAsset(const std::string& shaderAssetPath,const std::string& passName){
+    
+    std::map<std::string, std::string> shaderSource;
+    std::map<std::string, ShaderParser::PassData> shaderPasses; //  ShaderParser::PassData 是一个结构体，包含顶点着色器和片段着色器的源码
+
+    if (!ShaderParser::ParserShaderFromPath(shaderAssetPath, shaderPasses,shaderSource )) {
+        // 解析失败,直接返回,ShaderParser::ParserShaderFromPath() 已经打印了错误信息
+        return false;
+    }
+
+    if (shaderPasses.find(passName) == shaderPasses.end()) {
+        std::cout << "[ShaderParser] Failed to find pass: " << passName << std::endl;
+        return false;
+    }
+
+    return BuildFromSource(shaderPasses[passName].vertex, shaderPasses[passName].fragment);
+}
+
 
 // ============================ 读取着色器文件函数 ============================
 // const 表示参数 path 是只读的，函数内部不能修改它。

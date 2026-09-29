@@ -4,10 +4,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+// 引入自定义shader格式解析头文件
+#include "ShaderParser.h"
+
 class IShader{
     public:
         virtual ~IShader() = default;
         virtual bool BuildFromFiles(const std::string& vertexPath, const std::string& fragmentPath) = 0; // 从文件构建着色器
+        virtual bool BuildFromSource(const std::string& vertexSource, const std::string& fragmentSource) = 0; // 从源码构建着色器
+        virtual bool BuildFromShaderAsset(const std::string& shaderAssetPath,const std::string& passName) = 0; // 会自动解析ShaderAsset中的pass，根据passName构建着色器
         virtual unsigned int GetID() const = 0; // 获取着色器程序ID
         virtual void Use() = 0; // 使用着色器程序
         virtual void SetMatrix(const glm::mat4& ModeMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix) = 0; // 设置MVP矩阵Uniform

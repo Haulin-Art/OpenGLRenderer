@@ -3,6 +3,9 @@
 #include "Camera.h"
 #include "Renderer.h"
 #include "RenderQueue.h"
+
+#include "ShaderParser.h"
+
 //#include "OpenGLRenderer.h"
 // ============================ 编译期常量 ============================
 // constexpr 是编译期常量，比 #define 更安全（有类型检查、有作用域）。
@@ -31,7 +34,9 @@ int main(){
     std::string vsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicvertex.glsl";
     std::string fsPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/basicfrag.glsl";
     IShader* shader = renderer->CreateShader(); //
-    shader->BuildFromFiles(vsPath, fsPath);
+    //shader->BuildFromFiles(vsPath, fsPath);
+    std::string shaderAssetPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/shaderAssetTemplate.shader";
+    shader->BuildFromShaderAsset(shaderAssetPath,"Base");
     Material material(shader);
     material.renderState.depthTest = true;
 

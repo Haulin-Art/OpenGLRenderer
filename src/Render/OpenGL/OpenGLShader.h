@@ -23,7 +23,10 @@ class OpenGLShader : public IShader {
         void SetMatrix(const glm::mat4& ModeMatrix,const glm::mat4& ViewMatrix,const glm::mat4& ProjectionMatrix) override; // 设置MVP矩阵Uniform
         void SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor) override; // 设置灯光Uniform
         void SetCamera(const glm::vec3& cameraPos) override; // 设置摄像机相关Uniform
+
         bool BuildFromFiles(const std::string& vertexPath, const std::string& fragmentPath);
+        bool BuildFromSource(const std::string& vertexSource, const std::string& fragmentSource) override;
+        bool BuildFromShaderAsset(const std::string& shaderAssetPath,const std::string& passName) override;
 
         // Shadow Pass 嵌入式
         void SetMat4(const std::string& name, const glm::mat4& value) override;

@@ -65,6 +65,10 @@ add_executable(OpenGLRenderer
     src/Render/OpenGL/Passes/ScreenShadowBlurPass.cpp
     src/Render/OpenGL/Passes/BasePass.h
     src/Render/OpenGL/Passes/BasePass.cpp
+
+    # ---- Core: 核心层（与图形 API 无关）----
+    src/Core/ShaderParser/ShaderParser.h
+    src/Core/ShaderParser/ShaderParser.cpp
     )
 
 # 将项目根目录的绝对路径传给 C++，用于加载 shader 等资源文件
@@ -82,6 +86,7 @@ target_include_directories(OpenGLRenderer PRIVATE
     ${CMAKE_SOURCE_DIR}/src/Render/Camera
     ${CMAKE_SOURCE_DIR}/src/Render/OpenGL
     ${CMAKE_SOURCE_DIR}/src/Core
+    ${CMAKE_SOURCE_DIR}/src/Core/ShaderParser
 )
 
 # ============================================
