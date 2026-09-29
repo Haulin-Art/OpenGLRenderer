@@ -11,6 +11,9 @@
 #include <sstream> // 字符串流， 用于将文件内容读入字符串
 #include <string>  // 字符串类
 
+// 引入自定义shader格式解析头文件
+#include "ShaderParser.h"
+
 class OpenGLShader : public IShader {
     
     public:
@@ -24,7 +27,7 @@ class OpenGLShader : public IShader {
         void SetLight(const glm::vec3& lightPos, const glm::vec3& lightColor) override; // 设置灯光Uniform
         void SetCamera(const glm::vec3& cameraPos) override; // 设置摄像机相关Uniform
 
-        bool BuildFromFiles(const std::string& vertexPath, const std::string& fragmentPath);
+        bool BuildFromFiles(const std::string& vertexPath, const std::string& fragmentPath) override;
         bool BuildFromSource(const std::string& vertexSource, const std::string& fragmentSource) override;
         bool BuildFromShaderAsset(const std::string& shaderAssetPath,const std::string& passName) override;
 

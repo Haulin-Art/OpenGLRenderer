@@ -4,8 +4,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// 引入自定义shader格式解析头文件
-#include "ShaderParser.h"
 
 class IShader{
     public:

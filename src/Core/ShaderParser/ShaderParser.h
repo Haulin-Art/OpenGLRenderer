@@ -1,4 +1,5 @@
 // 用于解析Shader，将规范的Shader转换为GPU需要的Shader信息
+// 作为Core当中的工具类函数库，不依赖任何现有模块
 #pragma once
 
 // 必要头文件
@@ -8,14 +9,6 @@
 #include "sstream"
 #include "string"
 
-// 匿名空间，仅在当前文件中使用
-namespace {
-    // 统计一行中 { 和 } 的净变化量
-    int countBraceDelta(const std::string& line);
-
-    // 获取Shader中#include的文件的内容
-    std::string getIncludeContent(const std::string& line);
-}
 
 namespace ShaderParser {
     // Shader状态，这是定义的Shader格式，Shader中最上面应该是通用的 Properties，用于所有Pass内，然后也是后续Material的属性

@@ -2,29 +2,29 @@
 
 // 匿名空间，仅在当前文件中使用
 namespace {
-// 统计一行中 { 和 } 的净变化量
-int countBraceDelta(const std::string& line) {
-    int delta = 0;
-    for (char c : line) {
-        if (c == '{') delta++;
-        else if (c == '}') delta--;
+    // 统计一行中 { 和 } 的净变化量
+    int countBraceDelta(const std::string& line) {
+        int delta = 0;
+        for (char c : line) {
+            if (c == '{') delta++;
+            else if (c == '}') delta--;
+        }
+        return delta;
     }
-    return delta;
-}
-// 获取Shader中#include的文件的内容
-std::string getIncludeContent(const std::string& line) {
-    if (line.find("#include") == std::string::npos) {
-        return "";
+    // 获取Shader中#include的文件的内容
+    std::string getIncludeContent(const std::string& line) {
+        if (line.find("#include") == std::string::npos) {
+            return "";
+        }
+        // 找第一个引号
+        size_t q1 = line.find('"');
+        if (q1 == std::string::npos) return "";
+        // 找第二个引号
+        size_t q2 = line.find('"', q1 + 1);
+        if (q2 == std::string::npos) return "";
+        std::string includePath = line.substr(q1 + 1, q2 - q1 - 1);
+        return ShaderParser::getPathContent(PROJECT_SOURCE_DIR + includePath);
     }
-    // 找第一个引号
-    size_t q1 = line.find('"');
-    if (q1 == std::string::npos) return "";
-    // 找第二个引号
-    size_t q2 = line.find('"', q1 + 1);
-    if (q2 == std::string::npos) return "";
-    std::string includePath = line.substr(q1 + 1, q2 - q1 - 1);
-    return ShaderParser::getPathContent(PROJECT_SOURCE_DIR + includePath);
-}
 }
 
 namespace ShaderParser {
@@ -160,6 +160,12 @@ namespace ShaderParser {
                 }
             }
         }
-        return true;
+        if (shaderPasses.empty()) {
+            std::cout << "[ShaderParser] Failed to parse shader asset:" << filePath << std::endl;
+            return false;
+        }else{
+            return true;
+        }
+        
     }
 }

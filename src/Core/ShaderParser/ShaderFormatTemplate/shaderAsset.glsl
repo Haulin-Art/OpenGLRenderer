@@ -13,6 +13,13 @@ Common {
         vec3 Normal;
     };
 }
+// 似乎还有有些问题？
+// 我最开始是打算在我定义的这种 ShaderAsset 当中去声明使用这个的物体，会被管线当中的哪些Pass 使用的，比如 GBuffer Pass 和 Base Pass
+// 然后如果使用 GBuffer Pass ，就是使用这个 ShaderAsset 当中的 Pass "GBuffer" 当中的内容
+// 但是这样似乎会反复切换glProgram，而且我如果想使用Pass当中默认的 shader 呢？
+// 或许该视 ShaderAsset 当中声明的 Pass 为重载的 shader，而不想切换的只声明，而没有实际内容，这可能得再规定一下，比如 Pass "GBuffer" Default ？
+// 或许哪怕视为重载，比如有些使用默认的 GBuffer Shader，有些则是ShaderAsset 当中的 Pass "GBuffer" 当中的内容，对于这部分，或许在渲染时期要据此再排序一下
+
 
 // GBuffer Pass 的实现
 Pass "GBuffer" {
@@ -30,6 +37,7 @@ Pass "GBuffer" {
     }
     
     Fragment {
+        // #include 引用的实现
         #include "\src\Core\ShaderParser\ShaderFormatTemplate\PBRLibrary.glsl"
         in PS_INPUT psInput;
         layout(location = 0) out vec4 gAlbedo;

@@ -1,6 +1,7 @@
 // --- MyStandard.shader ---
 // 全局属性（Material 面板参数）
 Properties {
+    uniform vec3 baseColor;
 }
 
 // 公共代码块（会被预处理器注入到每个 Stage 前面）
@@ -33,30 +34,11 @@ Pass "Base" {
     Fragment {
         // 通用库文件，内部包含 MVP 矩阵，主光源位置和颜色
         #include "/src/shaders/shaderLibrary/Common.glsl"
+        // Pass中间文件，包含平面空间阴影、AO、SSGI纹理
+        #include "/src/shaders/shaderLibrary/PassScreenParams.glsl"
 
         in vec3 vertexNormal; // 从顶点着色器传入的法线
         in vec3 posWS;        // 世界坐标（阴影已经搬到屏幕空间算了，这里暂时用不到；留着以后雾效之类用）
-
-        uniform vec3 baseColor;
-
-        // ============================================================
-        // ★ 材质着色器现在只管"材质"该管的事。
-        //
-        //   以前这里塞着完整的 PCSS（~70 行的 blocker search + 可变半径 PCF），
-        //   意味着：每个材质像素都要重跑一遍 32 次采样；同一片屏幕被多个物体覆盖时还要重复算；
-        //   也没法整体降分辨率、没法单独给阴影做去噪。
-        //
-        //   现在阴影由 ScreenShadowPass 在【屏幕空间】算好并模糊过，
-        //   材质这边只做一次采样 —— 就下面这两行。
-        //
-        //   （顺带：所有屏幕空间的结果都用同一个套路 ——
-        //     gl_FragCoord 是当前像素的窗口坐标，除以【屏幕尺寸】就是 [0,1] 的 UV。
-        //     注意是屏幕尺寸，不是那张纹理的尺寸 —— 见下面 main 里的说明。）
-        // ============================================================
-        uniform sampler2D screenShadow;   // 屏幕空间阴影：1 = 被照亮，0 = 完全在阴影里
-        uniform sampler2D aoMap;          // 屏幕空间 AO：1 = 没被遮挡
-        uniform sampler2D ssgiMap;        // ★ 屏幕空间间接光（SSGI，半分辨率）：【加到环境光】上的一项
-        uniform vec2      screenSize;     // ★ 屏幕尺寸（像素）。屏幕空间纹理的 UV 必须用它当分母
 
         out vec4 fragColor;
 

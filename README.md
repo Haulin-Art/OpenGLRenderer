@@ -9,6 +9,11 @@
 **当前架构状态**：
 - 抽象接口 + 具体实现 + 工厂的第一轮解耦已完成 —— `main.cpp` 里**不出现任何 OpenGL 头文件**。
 - 后端由编译期宏选择、由唯一的工厂文件装配；`OpenGLRenderer.h` 与 `VulkanRenderer.h` 互不认识。
+- ★ **新增：Shader 资产格式（`.shader`）** —— `Core/ShaderParser/` 里有一个手写解析器，
+  把"Properties / Common / 多个 Pass"的资产文件拆成每个 Pass 各自的 Vertex / Fragment 源码，
+  `IShader::BuildFromShaderAsset(路径, Pass名)` 一次调用就能编译出其中一个 Pass 的程序（见 [10.4](#104-shader-资产格式shader--解析器)）。
+  现在猴头用的就是这条路径（`shaderAssetTemplate.shader` 的 `"Base"` Pass）。
+  **抽象层保持干净**：解析器只被 OpenGL 实现层依赖，`IShader.h` 里不含任何格式 / 图形 API 头。
 - **渲染管线已 Pass 化**：`OpenGLRenderer` 不再自己持有任何"中间 RT"，改成一个按 `Stage()` 排序的 `vector<unique_ptr<OpenGLRenderPass>>`；Pass 之间只通过一个每帧的 `OpenGLRenderContext` 交换数据。
 - 共 **8 个 Pass**：`ShadowPass(100)` → `GBufferPass(200)` → `SSAOPass(300)` → `SSAOBlurPass(310)` → `ScreenShadowPass(350)` → `ScreenShadowBlurPass(360)` → `SSGIPass(370)` → `SSGIBlurPass(371)` → `BasePass(500)`。
 - **PCSS 已经从材质着色器里搬到了屏幕空间**：`basicfrag.glsl` 只剩 3 次纹理采样（阴影 / AO / 间接光），不再自己跑 32 次采样的 blocker search。
@@ -32,7 +37,7 @@
 - [七、文件清单](#七文件清单)
 - [八、文件之间的关系](#八文件之间的关系)
 - [九、关键概念](#九关键概念)
-- [十、Shader 与顶点格式约定](#十shader-与顶点格式约定)
+- [十、Shader 与顶点格式约定](#十shader-与顶点格式约定)（★ 含 **10.4 Shader 资产格式 + 解析器**）
 - [十一、已知问题与 TODO](#十一已知问题与-todo)
 - [十二、变更记录](#十二变更记录)
 
@@ -107,6 +112,9 @@ OpenGLRenderer/
     │
     ├── Core/                         🚧 基础层
     │   ├── MatrixTools.h             ✅ Transform + TransformToModelMatrix（只剩这一个函数）
+    │   ├── ShaderParser/             ✅ ★ Shader 资产格式的解析器（见 7.1 / 10.4）
+    │   │   ├── ShaderParser.h/.cpp        手写状态机：把资产文件拆成每个 Pass 的 VS/FS 源码
+    │   │   └── ShaderFormatTemplate/      格式示例（纯文档，不参与编译）
     │   └── 想法.md                   ✅ 随手记的疑问（沟通用）
     │
     ├── Render/                       🚧 渲染核心层（与图形 API 无关）
@@ -149,8 +157,11 @@ OpenGLRenderer/
     │   ├── monkey.obj / monkey.mtl   ✅ 猴头模型（Suzanne）
     │   └── plane.obj  / plane.mtl    ✅ 单位平面（4 顶点 2 三角形，法线朝上）
     │
-    ├── shaders/                      ✅ 共 16 个（见 10.3）
-    │   ├── basicvertex / basicfrag             猴头 + 三个平面（片元只做 3 次屏幕空间采样）
+    ├── shaders/                      ✅ 共 18 个（见 10.3 / 10.4）
+    │   ├── shaderAssetTemplate.shader          ★ Shader 资产格式（猴头用的就是它的 "Base" Pass）
+    │   ├── shaderLibrary/Common.glsl           ★ 可被资产 #include 的库：MVP 矩阵 + 主光源
+    │   ├── shaderLibrary/PassScreenParams.glsl ★ 可被资产 #include 的库：屏幕空间 Pass 的产物
+    │   ├── basicvertex / basicfrag             旧写法（main 已改用资产文件，见 7.1）
     │   ├── groundNetVertex / groundNetFrag     半透明网格地面（fwidth 抗锯齿）
     │   ├── shadow_mapping_depth_vert / _frag   Shadow Pass 的深度专用着色器
     │   ├── gbuffer_vert / gbuffer_frag         G-Buffer（MRT：法线 + 世界深度）
@@ -788,39 +799,50 @@ fragColor = vec4(lambert, shadow, ao, 1.0);   // R=光照项, G=阴影, B=AO
 
 2. Camera camera; camera.SetViewportSize(renderer->GetWindowSize());
 
-3. 四份 Material：
-      material      (basicvertex/basicfrag)   depthTest = true, baseColor = 白   → 猴头
-      material2     (同一个 shader)            depthTest = true, baseColor = 红   → plane2
-      material3     (同一个 shader)            depthTest = true, baseColor = 绿   → plane3
-      planeMaterial (groundNet*)              AlphaBlend, depthWrite=false     → 半透明网格地面
+3. ★ 一份 Shader —— 从"Shader 资产文件"构建（见 10.4）：
+      shader = renderer->CreateShader();
+      shader->BuildFromShaderAsset(PROJECT_SOURCE_DIR
+                                   + "/src/shaders/shaderAssetTemplate.shader", "Base");
+      //   ↑ 解析资产文件 → 取名为 "Base" 的 Pass → 编译它的 Vertex / Fragment
+      //   （原来的 BuildFromFiles(basicvertex, basicfrag) 已被注释掉）
+      //   ⚠️ 返回值没有检查 → 路径或 Pass 名写错会静默继续（见 N8）
+
+   四份 Material（前三份共用上面这**一个** shader 程序）：
+      material      depthTest = true, baseColor = 白               → 猴头
+      material2     depthTest = true, baseColor = 红               → plane2
+      material3     depthTest = true, baseColor = 绿               → plane3（未提交）
+      planeMaterial AlphaBlend, depthTest = true, depthWrite=false → 半透明网格地面
    （★ material / material2 / material3 共用同一个 shader 程序，只差一个 baseColor uniform
      —— 这正是"材质 = shader + 状态 + 参数"的用法：换颜色不用换 shader。）
 
-4. 四份 Mesh：LoadObj → renderer->CreateMesh() → SetData(...)
+4. 五份 Mesh：LoadObj → renderer->CreateMesh() → SetData(...)
+   （mesh / plane / plane2 / plane3，后三个用的都是 `objMeshData1`，见 M2）
 
 5. 组装队列（★ 提交顺序故意是反的，用来验证排序生效）：
       Submit(plane ...)      // 半透明，先提交（应该被排到后面）
       Submit(mesh  ...)      // 不透明
       Submit(plane2...)      // 不透明，位置 (0,-1,0)、缩放 (3,1,3)
-      Submit(plane3...)      // 不透明，位置 (0,0,90)、缩放 (1.5,1,1.5)
+      // Submit(plane3...)   // ← 已被注释掉（plane3 建了 mesh 却没提交，也没 delete，见 M1）
 
 6. 主循环：
-      PollEvents → camera.mouseX += 1.0（调试自转）→ camera.Update()
-      → RenderQueue::Sort(cameraData.position)     // ★ 每帧排序
+      PollEvents
+      → camera.SetViewportSize(renderer->GetWindowSize())   // ★ 每帧同步窗口尺寸
+      → camera.mouseX += 1.0（调试自转）→ camera.Update()
+      → RenderQueue::Sort(cameraData.position)              // ★ 每帧排序
       → renderer->Clear()
       → renderer->ExecuteRenderCommands(queue.Commands(), cameraData)
             // 内含 8 个 Pass；main 完全不知道有几个 Pass
       → SwapBuffers
 ```
 
-**依赖**：`Renderer.h`、`RenderQueue.h`、`Camera.h`、`Material.h`、`ObjLoader.h`、`<iostream>`
+**依赖**：`Renderer.h`、`RenderQueue.h`、`Camera.h`、`Material.h`、`ObjLoader.h`、`ShaderParser.h`（⚠️ 引了但没用到）、`<iostream>`
 **被谁使用**：无（程序入口）
 
 **已知问题**：
-- 大量死代码：`vertices[]`、`indices[]`、局部 `view` / `projection` / `aspect` / `OrthoProjectionMatrix` / `viewWidth` / `viewHeight` 全部不再被使用
+- 大量死代码：`vertices[]`、`indices[]`、局部 `view` / `projection` / `aspect` / `OrthoProjectionMatrix` / `viewWidth` / `viewHeight`、以及 `vsPath` / `fsPath`（`BuildFromFiles` 那行被注释后它们就没人用了）全部不再被使用
 - `camera.mouseX += 1.0` 是调试代码，导致相机每帧持续自转（代码里注释写着"临时冻住相机（验证颜色渗透）"，其实是在自转）
-- `shader->BuildFromFiles(...)` 的**返回值被丢弃** → shader 加载失败时静默继续（N8）
-- **`plane3` 没有 `delete`** → 泄漏（M1；`plane2` 已经补上了）
+- `shader->BuildFromShaderAsset(...)` 的**返回值被丢弃** → 资产路径或 Pass 名写错时静默继续（N8；老问题是 `BuildFromFiles`，新接口沿用了同样的写法）
+- **`plane3` 没有 `delete`** → 泄漏（M1；而且它的 `Submit` 已被注释掉 → 白建一个 GPU 网格）
 - **`plane2->SetData(objMeshData1)` / `plane3->SetData(objMeshData1)`** 用的都是**第一个平面**的数据，不是 `objMeshData2`（M2；三个 `plane.obj` 内容相同所以看不出问题，但 `objMeshData2` 白加载了）
 - 两条 `LoadObj` 失败提前 `return -1` 的路径上，已 new 的 shader/mesh/renderer 没有释放（M3）
 - 结尾的 `delete` 顺序是正确的：**先删资源、最后删 renderer**（因为 `~OpenGLRenderer` 会 `mPasses.clear()` → 再 `glfwTerminate`）
@@ -880,6 +902,69 @@ inline glm::mat4 TransformToModelMatrix(const Transform& transform){
 
 ---
 
+#### `src/Core/ShaderParser/ShaderParser.h` / `ShaderParser.cpp` ✅ ★ 新增
+
+**职责**：解析"Shader 资产文件"（`.shader`），把它拆成**每个 Pass 各自的 Vertex / Fragment 源码字符串**。
+格式定义见 [10.4](#104-shader-资产格式shader--解析器)。
+
+**接口**：
+
+```cpp
+namespace ShaderParser {
+
+    enum ShaderState { None, Properties, Common, Pass };
+    enum PassState   { pNone, Vertex, Fragment };
+
+    struct PassData {                 // 一个 Pass 的两段源码（已拼好、可直接编译）
+        std::string vertex;
+        std::string fragment;
+    };
+
+    std::string getPathContent(const std::string& path);
+
+    // 解析资产文件：
+    //   shaderPasses → key = Pass 名，value = 该 Pass 的 VS/FS 源码
+    //   shaderSource → key = "Properties" / "Common"，value = 两个块各自的原文
+    bool ParserShaderFromPath(const std::string& filePath,
+                              std::map<std::string, PassData>& shaderPasses,
+                              std::map<std::string, std::string>& shaderSource);
+}
+```
+
+**它是怎么工作的**（一个按行扫描的状态机）：
+
+```
+Properties { ... }        → shaderState = Properties，收集原文（不含花括号）
+Common     { ... }        → shaderState = Common，收集原文
+Pass "名字" {             → shaderState = Pass，记下 currentPass
+    Vertex   { ... }      → passState = Vertex，把每一行追加到 vertex
+    Fragment { ... }      → passState = Fragment，把每一行追加到 fragment
+}
+```
+
+- 用**花括号计数（`depth`）**判断"当前块什么时候结束"
+- 每个 Pass 的源码开头会自动拼上 `#version 460 core` + `Properties` 原文 + `Common` 原文
+  （所以 Properties / Common 里声明的东西，在**每个 stage** 里都可见）
+- 遇到 `#include "路径"` 时，把那个文件的内容**展开进来**（路径是**项目根目录相对**）
+
+**依赖**：`<map>` / `<fstream>` / `<sstream>` / `<string>`，以及构建系统注入的 `PROJECT_SOURCE_DIR`
+**被谁使用**：`OpenGLShader::BuildFromShaderAsset()`（→ 进而被 `IShader` / `main` 用到）
+
+**已知问题**：
+- 🚧 **头文件里有一个匿名 namespace，只有声明、没有定义**（`countBraceDelta` / `getIncludeContent`）。
+  定义在 `.cpp` 的匿名 namespace 里 → 现在没人调用所以无害，但**一旦别的文件调用它们，会编译通过、链接失败**
+- 🚧 **`#include` 的文件打不开时，会把 `#include "..."` 这一行原样塞进 GLSL** → 编译报一个和真实原因（路径写错）完全无关的错
+- 🚧 **花括号换行写会让解析静默错乱**：`depth = 1` / `depth = 2` 是**硬赋值**的，隐含"`{` 必须和关键字同行"
+- 🚧 **`ParserShaderFromPath` 的返回值几乎永远是 true**：只有"文件打不开"才返回 false，格式错 / 一个 Pass 都没解析出来也返回 true
+- 🚧 关键字检测用的是 `find`（**包含匹配**）而不是"行首精确匹配" → 例如 `struct VertexData {` 会被误判成进入 Vertex 段
+- 🚧 `shaderSource` 用 `map<string,string>` + 魔法字符串（`"Properties"` / `"Common"`）→ 拼错 key 会静默拿到空串；只有两个固定块，换成 `struct` 更安全
+- 🚧 `Properties` / `Common` 必须写在所有 Pass **之前**（Pass 初始化时直接读它们），但解析器不校验
+- 🚧 `#include` **不递归**、只认双引号、不剥 UTF-8 BOM；且被 include 的文件里**不能有 `#version`**（它被插在源码中间）
+- 🚧 `GLSL_VERSION` 硬编码在解析器里（`"#version 460 core"`），以后想支持别的版本就得改解析器
+- 🚧 `Properties` 的语义还没兑现：现在它只是"原样注入到每个 stage 前面"；要做到"驱动 Material 参数面板"，解析器得产出**结构化**信息（名字/类型/默认值）
+
+---
+
 ### 7.2 抽象接口层
 
 ---
@@ -893,6 +978,10 @@ public:
 
     virtual bool BuildFromFiles(const std::string& vertexPath,
                                 const std::string& fragmentPath) = 0;
+    virtual bool BuildFromSource(const std::string& vertexSource,
+                                 const std::string& fragmentSource) = 0;   // 直接给源码
+    virtual bool BuildFromShaderAsset(const std::string& shaderAssetPath,
+                                      const std::string& passName) = 0;    // ★ 解析资产后取某个 Pass，见 10.4
     virtual unsigned int GetID() const = 0;              // ⚠️ 见 N5
     virtual void Use() = 0;
     virtual void SetMatrix(const glm::mat4& model,
@@ -912,7 +1001,11 @@ public:
 };
 ```
 
-**依赖**：`<string>`、`<glm/glm.hpp>`、`<glm/gtc/type_ptr.hpp>`（**不依赖任何图形 API 头**，干净的一层）
+**依赖**：`<string>`、`<glm/glm.hpp>`、`<glm/gtc/type_ptr.hpp>`（**不依赖任何图形 API 头、也不依赖任何格式解析头** ✅）
+
+> ✅ **已修（N19）**：这一层之前 include 了 `ShaderParser.h`，等于把"具体文件格式"拖进了抽象接口；
+> 现在那行已经删掉，`#include "ShaderParser.h"` 移到了 OpenGL 实现那边。
+> 于是 `Material.h`、`Renderer.h`、所有 Pass 都不再**间接**拿到解析器的头。
 
 **为什么是通用 setter，而不是 `SetTexture(ITexture*)`**：
 纹理绑定（`glActiveTexture` / `glBindTexture`）由各 Pass 直接做（它们本来就是 OpenGL 层）；
@@ -927,6 +1020,7 @@ shader 只需要知道"采样器 uniform 指向第几个纹理单元"，那就�
 
 **已知问题**：
 - `GetID()` 返回"着色器程序 ID" —— 这是 **OpenGL 特有的概念**（Vulkan/D3D 没有"program id"），属于抽象层泄漏，而且全项目没人调用（N5）
+- ★ 三个 build 入口都**只返回 bool、没有失败详情**；而 `main` 连这个返回值都没检查 → 加载失败时静默继续（N8）
 
 ---
 
@@ -1272,20 +1366,41 @@ shader / mesh 都来自渲染队列里的 `Material`，相机 / 光源 / 三张�
 |---|---|
 | `OpenGLShader()` | 默认构造，此时 `m_ID == 0` |
 | `~OpenGLShader()` | `glDeleteProgram(m_ID)` ⚠️ **要求 GL 上下文仍存活** |
-| `BuildFromFiles(vs, fs)` | 读文件 → 编译 → 链接 → 检查日志 |
+| `BuildFromFiles(vs, fs)` | 读两个文件 → 编译 → 链接 → 检查日志 |
+| `BuildFromSource(vsSrc, fsSrc)` | ★ 同上，但源码直接给（不走文件） |
+| `BuildFromShaderAsset(assetPath, passName)` | ★ 调 `ShaderParser` 解析资产 → 取指定 Pass 的 VS/FS → 转交 `BuildFromSource` |
 | `Use()` | `glUseProgram(m_ID)` |
 | `SetMatrix/SetLight/SetCamera` | 三个语义化 setter |
-| `SetMat4(name, value)` / `SetInt(name, value)` / `SetVec2(name, value)` | 三个通用 setter（各屏幕空间 Pass 用） |
+| `SetMat4` / `SetInt` / `SetVec2` / `SetVec3` | 四个通用 setter（各屏幕空间 Pass、`baseColor` 用） |
+
+**三个 build 入口的关系**：
+
+```
+BuildFromFiles(vs路径, fs路径)  ─┐
+                                 ├─→ 编译 + 链接（这段目前被复制了三份）
+BuildFromSource(vs源码, fs源码) ─┤
+                                 │
+BuildFromShaderAsset(资产, Pass) ─┘  ← 解析资产 → 取该 Pass 的源码 → 转交 BuildFromSource
+```
+
+> ★ 后半段（编译 → attach → link → 查 `GL_LINK_STATUS` → 删 shader）三个入口**一模一样**。
+> 建议抽成一个私有的 `bool buildProgram(vsSource, fsSource)`，三个入口只负责"准备源码"。
 
 **已知问题**：
-1. `BuildFromFiles` **没写 `override`**（N6）—— 靠签名一致隐式覆盖，签名写错时不会报错
-2. `const mVertexPath` / `mFragmentPath` 是早期"构造时构建"留下的**死成员**（N7）
+1. `BuildFromFiles` **没写 `override`**（N6）—— 靠签名一致隐式覆盖，签名写错时不会报错。
+   ★ 现在更明显了：`BuildFromSource` / `BuildFromShaderAsset` 都写了 `override`，只有它没写
+2. `const mVertexPath` / `mFragmentPath` 是早期"构造时构建"留下的**死成员**（N7）。
+   ★ 现在有 3 个 build 入口了，它们更没意义，可以直接删
 3. **每次 `Set*` 都调用 `glGetUniformLocation`**（字符串查找 + 驱动调用）。location 从链接成功那刻起就不会变，应该查一次缓存（R5）。
    ★ Pass 化之后这条**更值得修了**：现在每帧的 `Set*` 调用次数是原来的好几倍（8 个 Pass × 各自的 uniform）
+   ★ **新机会**：解析器本来就知道 `Properties` 块里所有的 uniform 名字 —— 以后可以让它在构建时顺便把这些 location 查好缓存起来
 4. `glUniform*` 只对**当前绑定的 program** 生效 → 所有 `Set*` **必须在 `Use()` 之后**调用
-5. 构造失败无法上报：错误只能通过 `BuildFromFiles` 的返回值传递，而 main 丢弃了它（N8）
+5. 构造失败无法上报：错误只能通过返回值传递，而 main 丢弃了它（N8）
 6. 编译失败时 `compileShader` 只打印日志、**仍然返回 shader 对象**，接着照样 `glAttachShader` + `glLinkProgram`
    （链接会失败，所以最终仍能靠 `GL_LINK_STATUS` 兜住，但错误信息会绕一圈）（N17）
+7. ★ **三个 build 入口的"编译 + 链接"逻辑重复了三份** —— 应抽成私有的 `buildProgram()`
+8. ★ `BuildFromShaderAsset` **每次调用都重新读盘 + 重新解析**资产文件。如果按 Pass 建 N 个 shader，同一个文件就读 N 次、解析 N 次
+9. ★ `#version 460 core` 是**解析器**硬编码的，`OpenGLShader` 这边无法指定别的版本
 
 ---
 
@@ -1395,11 +1510,15 @@ Render/OpenGL/Passes/*.cpp ──→ 各自的 Pass.h ──→ OpenGLRenderPass
                                      │
                                      ├─→ <glad/glad.h>          ← ★ 谁用谁 include
                                      └─→ OpenGLShader.h         ← 头里只前向声明，.cpp 才 include
-OpenGLShader.cpp   ──→ OpenGLShader.h ──→ IShader.h
+OpenGLShader.h     ──→ IShader.h                        ← 抽象接口层：干净（无图形 API 头、无解析器头）
+OpenGLShader.h     ──→ ShaderParser.h                   ← ✅ 解析器的依赖只留在 OpenGL 实现层（原先在 IShader.h 里，已修）
+OpenGLShader.cpp   ──→ OpenGLShader.h
 OpenGLMesh.cpp     ──→ OpenGLMesh.h   ──→ IMesh.h ──→ ObjLoader.h
-Material.cpp       ──→ Material.h ──→ IShader.h
+Material.cpp       ──→ Material.h ──→ IShader.h          ← 不再间接依赖 ShaderParser.h（N19 已修）
 Camera.cpp         ──→ Camera.h
 ObjLoader.cpp      ──→ ObjLoader.h + tinyobjloader
+ShaderParser.cpp   ──→ ShaderParser.h                    ← 用 PROJECT_SOURCE_DIR 拼资源路径、读资产文件与 #include 的文件
+main.cpp           ──→ ShaderParser.h                    ← ⚠️ 引了但没用到
 ```
 
 **读法**：只有 `Render/OpenGL/` 底下的文件连到 `<glad/glad.h>` / `<GLFW/glfw3.h>`。
@@ -1649,11 +1768,14 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 
 > 对没有声明该 uniform 的 shader 调用无害：`glGetUniformLocation` 返回 -1，而 `glUniform*` 在 location 为 -1 时**被规范要求忽略**。
 
-### 10.3 着色器清单（16 个文件 / 10 个 program）
+### 10.3 着色器清单（18 个文件 / 11 个 program）
 
 | 着色器 | 用途 | 说明 |
 |---|---|---|
-| `basicvertex` / `basicfrag` | 猴头 + 三个平面 | 顶点输出 `vertexNormal` + `posWS`；片元只做 3 次屏幕空间采样（阴影/AO/SSGI）+ 乘 `baseColor`，**不再自己算 PCSS** |
+| `basicvertex` / `basicfrag` | （已无使用者） | 资产文件出现之前猴头用的那一对；现在由 `shaderAssetTemplate.shader` 的 `"Base"` Pass 取代，保留作对照 |
+| ★ `shaderAssetTemplate.shader` | 猴头 + 三个平面 | **新的「Shader 资产」格式**（见 10.4）：`Properties { baseColor }` + 一个 `"Base"` Pass；片元只做 3 次屏幕空间采样，末尾乘 `baseColor` |
+| ★ `shaderLibrary/Common.glsl` | 库文件 | 被资产 `#include` 进来的公共声明：三个 MVP 矩阵 + `mainLightPos` / `mainLightColor` |
+| ★ `shaderLibrary/PassScreenParams.glsl` | 库文件 | 被资产 `#include` 进来的公共声明：`screenShadow` / `aoMap` / `ssgiMap` / `screenSize` |
 | `groundNetVertex` / `groundNetFrag` | 半透明网格地面 | 用 `fwidth` 做屏幕空间抗锯齿的多层网格（小格 + 大格 + 红/蓝坐标轴）；按距离淡出；**★ 完全不采样任何屏幕空间纹理** |
 | `shadow_mapping_depth_vert` / `_frag` | `ShadowPass` | 顶点只输出 `gl_Position`；**片元 `main(){}` 是空的**（只有深度有意义） |
 | `gbuffer_vert` / `gbuffer_frag` | `GBufferPass` | 法线用**逆转置矩阵**变换；MRT 一次写 `gNormal`(loc 0) + `gDepth`(loc 1) |
@@ -1671,6 +1793,106 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 > （`(2,0)` 和 `(0,2)`），三角形把 `[-1,1]²` 完全盖住，插值出来的 `vUV` 在屏幕内正好是 `[0,1]`。
 > 比全屏四边形少一个顶点、少一条对角线边界，代价是要有一个空 VAO
 > （Core Profile 规定"必须绑定一个 VAO 才能 draw"，哪怕它一个属性都没有）。
+
+### 10.4 Shader 资产格式（.shader）+ 解析器
+
+**动机**：把"一个材质需要几个 Pass、每个 Pass 的 VS/FS 长什么样"收进**一个文件**，
+而不是散在 `src/shaders/` 里的一堆 `.glsl`（还要在 C++ 里记住谁配谁）。灵感来自 Unity 的 ShaderLab。
+
+**格式**：
+
+```
+Properties { ... }      // 全局属性：注入到每个 stage，将来对应 Material 的参数
+Common     { ... }      // 公共代码：结构体 / 函数 / uniform 声明，注入到每个 stage
+
+Pass "名字" {
+    Vertex   { ... }
+    Fragment { ... }
+}
+Pass "另一个名字" { ... }
+```
+
+**四条格式规则**（都是当前解析器的硬性前提）：
+
+| 规则 | 说明 |
+|---|---|
+| ① `{` 必须和关键字**同一行** | 解析器里的深度是**硬赋值**的（`depth = 1` / `2`），换行写会**静默错乱** |
+| ② `Properties` / `Common` 必须写在**所有 Pass 之前** | 每个 Pass 初始化时直接读它们，写在后面会被注入成空 |
+| ③ `#include "路径"` 的路径是**项目根目录相对** | 必须写成 `/src/shaders/shaderLibrary/xxx.glsl`（**不是**当前文件相对） |
+| ④ 被 include 的文件里**不能有 `#version`** | 它被插在源码中间，而 `#version` 必须出现在最前面 |
+
+**解析后每个 Pass 拿到什么**：
+
+```
+#version 460 core                       ← 解析器硬编码
+<Properties 块的原文>
+<Common 块的原文>
+<Vertex 块里除了 #include 行以外的每一行（#include 已被展开）>
+```
+
+也就是说 **Vertex 和 Fragment 各自都是"自包含"的** —— 这是 GLSL 的要求：
+每个 stage 都得自己声明要用到的 uniform / 函数，不能靠另一个 stage 帮它声明。
+
+**和 `IShader` 的接法**：
+
+```cpp
+IShader* shader = renderer->CreateShader();
+shader->BuildFromShaderAsset(".../shaderAssetTemplate.shader", "Base");
+//                          └ 资产文件路径                       └ 要哪一个 Pass
+```
+
+内部流程：
+
+```
+ParserShaderFromPath(资产)
+        │
+        ▼
+map<Pass名, PassData{ vertex, fragment }>
+        │  按 passName 取一份
+        ▼
+BuildFromSource(vs, fs)  →  编译 + 链接
+```
+
+**当前示例**（`src/shaders/shaderAssetTemplate.shader`）：
+
+```glsl
+Properties { uniform vec3 baseColor; }
+Common { }
+
+Pass "Base" {
+    Vertex   { #include "/src/shaders/shaderLibrary/Common.glsl"   ... }
+    Fragment { #include ".../Common.glsl"
+               #include ".../PassScreenParams.glsl"                ... }
+}
+```
+
+- `material` / `material2` / `material3` 共用这**一个** program，只换 `baseColor` uniform
+  —— 这正是"材质 = shader + 状态 + 参数"的用法
+- 片元里那段 `cc = baseColor == vec3(1,0,0) ? 棋盘格 : 白` 是**调试用**的（验证 SSGI 颜色渗透），不是最终效果
+
+**`src/Core/ShaderParser/ShaderFormatTemplate/shaderAsset.glsl` 是什么**：
+
+它是**格式示意**（展示"多 Pass"怎么写：GBuffer / Base / Shadow），**不是可编译代码**：
+
+```glsl
+uniform vec3 Albedo = (1.0, 1.0, 1.0);   // ← GLSL 没有元组语法，应为 vec3(1.0, 1.0, 1.0)
+uniform vec3 Albedo;                      // ← 和 Properties 里重复声明（GLSL 会报重定义）
+#include "\src\Core\...\PBRLibrary.glsl"   // ← 反斜杠（真在用的模板写的是正斜杠）
+Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
+```
+
+真正在用、能跑的模板是 `src/shaders/shaderAssetTemplate.shader`。
+
+**目前的局限 / 下一步**：
+
+| 局限 | 说明 |
+|---|---|
+| 没有批量接口 | 现在"一个 Pass = 调一次 `BuildFromShaderAsset`"，同一个资产会被**读盘 + 解析 N 次** |
+| `Properties` 只是**文本** | 没有结构化的（名字 / 类型 / 默认值）信息 → 无法自动生成 Material 参数、无法自动缓存 uniform location |
+| **渲染状态管不到** | `RenderState`（depth / blend / cull）仍然写在 C++ 的 `Material::renderState` 里，资产文件里没有对应声明（Unity 是写在 Pass 里的） |
+
+> **建议的下一步**：把 `Properties` 解析成结构化数据（`{ name, glslType, defaultValue }`）。
+> 一举两得：① 可以自动列出材质参数、赋默认值；② 可以在构建时顺便把 uniform location 查好缓存（顺手修掉 R5）。
 
 ---
 
@@ -1744,6 +1966,13 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 | **N15** | ⬜ **新**：Pass 之间的**渲染状态没有共享的缓存**（各 Pass 无条件发状态，`OpenGLRenderer::mRenderState` 半废弃） | 抽一个 `OpenGLStateCache` 放进 `ctx`，由所有 Pass 共用 —— **缓存只有一份才可能和 GL 真实状态一致**，那时再恢复"只在变化时才发"（见 9.4） |
 | **N16** | ⬜ **新**：每个 Pass 各自持有一个 `std::unique_ptr<OpenGLShader>`，各自 `BuildFromFiles` | 现在有 6 个全屏 Pass 各自编译一个 program。功能上没问题，但 `SSAOBlur` / `ScreenShadowBlur` **两个片元着色器几乎一模一样**（只差输入名和权重数量），`SSGIBlur` 也只多了一个法线权重 —— 可以合并成"一个带权重的模糊 program"，用 uniform/宏区分 |
 | **N17** | ⬜ **新**：`OpenGLShader::compileShader` 编译失败时只打印日志、**仍然返回 shader 对象** | 接着照样 attach + link（链接会失败，所以最终能靠 `GL_LINK_STATUS` 兜住），但错误信息会绕一圈、难定位 → 编译失败时返回 0 并让 `BuildFromFiles` 立刻 `return false` |
+| **N18** | ⬜ **新（ShaderParser）**：`ShaderParser.h` 里有一个**只声明、没定义**的匿名 namespace（`countBraceDelta` / `getIncludeContent`） | 现在没人调用所以无害；**别的文件一旦调用 → 编译通过、链接失败**，错误信息极具误导性 | 从 `.h` 里删掉这两行，声明留在 `.cpp` 的匿名 namespace 里（它们本来就是"仅本文件使用"） |
+| **N19** | ✅ **已修**：`IShader.h` 曾 include `ShaderParser.h`，把"具体文件格式"拖进了抽象层 | 已删掉那行 include，解析器依赖现在只留在 `OpenGLShader.h`（OpenGL 实现层）。★ 剩一点小瑕疵：`OpenGLShader.h` 其实也不是必须要它（头里只用到 `std::string`），可以再挪进 `OpenGLShader.cpp` |
+| **N20** | ⬜ **新（ShaderParser）**：三个 build 入口（`BuildFromFiles` / `BuildFromSource` / `BuildFromShaderAsset`）的"编译 + 链接"重复三份 | 每加一种加载方式就要再抄一遍 20 行 | 抽成私有 `bool buildProgram(vsSource, fsSource)` |
+| **N21** | ⬜ **新（ShaderParser）**：`ParserShaderFromPath` 返回值几乎永远是 `true`（只有文件打不开才 false）；关键字检测用 `find`（**包含匹配**）；`depth` 是**硬赋值** | 格式错 → 静默得到空 Pass / 静默解析错乱；最后在 GLSL 编译期才炸，而错误信息指向**生成出来的源码**，很难对上原始资产文件 | 结束前校验"至少解析出一个 Pass"；关键字改成**行首精确匹配**；`depth` 改成累加（或在文档里把"`{` 必须同行"标红） |
+| **N22** | ⬜ **新（ShaderParser）**：`#include` 打不开时会把 `#include "..."` 这一行**原样塞进 GLSL** | 报一个和真实原因（路径写错 / 少了开头的 `/`）完全无关的编译错误 | 打不开就立刻 `return false`，并打印出是哪个文件、拼出来的绝对路径是什么 |
+| **N23** | ⬜ **新（ShaderParser）**：`BuildFromShaderAsset` 每次调用都**重新读盘 + 重新解析**资产文件 | 按 Pass 建 N 个 shader 就要读 N 次、解析 N 次 | 加一层"按路径缓存解析结果"；或者提供"一次解析、多次取用"的接口 |
+| **N24** | ⬜ **新（ShaderParser）**：`Properties` 只被当作**文本**注入 | 拿不到（名字 / 类型 / 默认值）→ 无法自动生成 Material 参数、无法自动赋默认值、无法顺便缓存 uniform location | 把 `Properties` 解析成 `struct Property { name, glslType, defaultValue }`，这是"资产格式"真正有价值的下一步 |
 
 > ✅ **已修复**：`Shader`/`Mesh` 直接调 `gl*` 且放在 `src` 根目录（已拆成 `IShader`/`IMesh` + `Render/OpenGL/*`）；
 > `Material` 间接依赖 glad；`IRenderer::Render(Mesh*,Shader*,mat4&)` 空实现（已删）；
@@ -1754,7 +1983,7 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 
 | # | 问题 | 后果 | 建议 |
 |---|---|---|---|
-| **M1** | `main` 结尾**没有 `delete plane3`** | 泄漏（`plane2` 已经补上了，`plane3` 是后来加的，忘了跟着删） | 补上 `delete plane3;` |
+| **M1** | `main` 结尾**没有 `delete plane3`**（而 `plane3` 建了 mesh、`Submit` 却被注释掉了） | 泄漏，而且那个 GPU 网格是**白建的**（`plane2` 已补上 delete，`plane3` 是后来加的，忘了跟着删） | 补上 `delete plane3;`，或者把 `plane3` 整段删掉 |
 | **M2** | `plane2->SetData(objMeshData1)` / `plane3->SetData(objMeshData1)` 用的是**第一个平面**的数据（应该是 `objMeshData2` / 重新加载） | 三个平面内容相同所以现在看不出问题，但 `objMeshData2` 白加载了 | 改成各自的数据；或干脆只加载一份共用 |
 | **M3** | `main` 提前 `return -1` 的路径不释放已创建的资源 | 泄漏（进程即将退出，影响小） | 收进一个 `Application` 类 |
 | **M4** | `OpenGLMesh::SetData` 重复调用会 `glGen*` 并覆盖旧句柄 | 旧的 VAO/VBO/EBO 泄漏 | 先删旧的，或加"只允许设置一次"的断言 |
@@ -1762,7 +1991,11 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 
 ### 11.6 清理项
 
-- `main.cpp`：`vertices` / `indices` / 局部 `view` / `projection` / `aspect` / `OrthoProjectionMatrix` / `viewWidth` / `viewHeight` 全是死代码
+- `main.cpp`：`vertices` / `indices` / 局部 `view` / `projection` / `aspect` / `OrthoProjectionMatrix` / `viewWidth` / `viewHeight` / `vsPath` / `fsPath` 全是死代码
+- `main.cpp`：`#include "ShaderParser.h"` 引了但没用到
+- ★ `src/shaders/basicvertex.glsl` / `basicfrag.glsl`：已被 `shaderAssetTemplate.shader` 取代，目前**没有使用者**（保留作对照，或直接删）
+- ★ `src/Core/ShaderParser/ShaderFormatTemplate/shaderAsset.glsl`：是"**结构示意**"而不是可编译代码（元组语法 / 重复声明 uniform / 反斜杠路径 / `666666666;` 占位）—— 建议在文件头明确标注，免得以后照着抄
+- ★ `OpenGLShader`：`mVertexPath` / `mFragmentPath` 是死成员（N7）
 - `main.cpp`：`//#include "OpenGLRenderer.h"` 和 `//IRenderer* renderer = new OpenGLRenderer(...)` 两条死注释
 - `OpenGLMesh.h` / `OpenGLMesh.cpp`：注释里的"每个顶点 6 个 float / stride 24"已过时（实际 8 个 / 32）
 - `OpenGLRenderer.h`：`window` 是 public，建议改 private
@@ -1788,9 +2021,12 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
    顺便解决 S16（尺寸来源不一）、S15（6 个重复的空 VAO）、以及"每个全屏 Pass 都要抄一遍收尾四行"
 8. **合并三个模糊 Pass**（N16）—— `SSAOBlur` / `ScreenShadowBlur` / `SSGIBlur` 是同一个算法的三种权重组合，
    值得抽成一个可配的"模糊 Pass"
-9. **再往后** —— `FrameData`（把光源/清屏色也变成"每帧传一次"）、`Scene` 层、`ResourceManager`、
-   **把 `目标渲染架构.md` 更新到与 Pass 管线一致**、`PostProcess` Pass（色调映射/泛光）、SSRT（屏幕空间反射）、
-   以及 S12 提到的 Vulkan 后端（注意：Pass 管线本身是 OpenGL 专属的，那边要重做一套）
+9. **ShaderParser 的几条硬伤**（N18 / N21 / N22）—— 都是几行改动，但能一次消掉
+   "**静默失败**"和"**错误信息把人带偏**"这两类最难查的问题。顺带把 `Properties` 做成结构化（N24），
+   为"自动生成 Material 参数 + 自动缓存 uniform location"铺路 —— 这是"资产格式"真正开始有价值的下一步
+10. **再往后** —— `FrameData`（把光源/清屏色也变成"每帧传一次"）、`Scene` 层、`ResourceManager`、
+    **把 `目标渲染架构.md` 更新到与 Pass 管线一致**、`PostProcess` Pass（色调映射/泛光）、SSRT（屏幕空间反射）、
+    以及 S12 提到的 Vulkan 后端（注意：Pass 管线本身是 OpenGL 专属的，那边要重做一套）
 
 ---
 
@@ -1823,7 +2059,7 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 | **`MatrixTools.h`** | 抽出 `Transform` + `TransformToModelMatrix`（三个函数加 `inline` 解决 `multiple definition`） |
 | **修掉的 bug** | `lightPos` 误写成负数（灯在地底下）→ 改成正的；`lightView` 双初始化；`lambert` 里多余的负号；`1.0 - ShadowFactor` 反号；`MatrixTools.h` 缺 `inline`；`RendererFactory` 的 `return nullptr` → `#error`；`RendererFactory.h` 补 `include config.h`；CMake 补 `src/Core` include 路径；`.gitignore` 放行 `mesh/*.obj` |
 
-### 第三轮：Pass 化 + 屏幕空间效果（★ 当前）
+### 第三轮：Pass 化 + 屏幕空间效果
 
 | 项目 | 之前 | 现在 |
 |---|---|---|
@@ -1845,10 +2081,24 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 | **一次性修掉的老问题** | — | S1（资源不释放）、S2（纹理解绑/反馈循环）、S3（死代码）、S5（`1024` 硬编码）、S6（灯光矩阵算两遍 + 死函数）、S7（每物体重算 `P*V`）、S11（`InitShadowPass` public）、C4、C5、S13 |
 | **新引入的问题** | — | S14（调试自检默认开着，含 `glReadPixels`）、S15（6 个重复的空 VAO）、S16（各 Pass 自缓存尺寸）、N15（没有共享状态缓存）、N16（三个模糊着色器重复）、N17（编译失败仍返回 shader） |
 
+### 第四轮：Shader 资产格式 + 解析器（★ 最新）
+
+| 项目 | 说明 |
+|---|---|
+| **资产格式** | 新增 `.shader` 格式：`Properties{...}` / `Common{...}` / 多个 `Pass "名" { Vertex{} Fragment{} }`，支持 `#include "库文件"`（见 10.4） |
+| **解析器** | `Core/ShaderParser/` 新增：手写状态机，按花括号深度把资产拆成**每个 Pass 的 VS/FS 源码**，并自动拼上 `#version 460 core` + Properties + Common |
+| **`IShader`** | 新增 `BuildFromSource(vs源码, fs源码)` 与 `BuildFromShaderAsset(资产路径, Pass名)`（原来只有 `BuildFromFiles`） |
+| **实际接入** | 猴头 / `material2` / `material3` 改用 `shaderAssetTemplate.shader` 的 `"Base"` Pass；`basicvertex/basicfrag` 因此暂时**失去使用者** |
+| **shader 库文件** | 新增 `src/shaders/shaderLibrary/`：`Common.glsl`（MVP 矩阵 + 主光源）、`PassScreenParams.glsl`（屏幕空间三张纹理 + `screenSize`），供资产 `#include` |
+| **格式示例** | `Core/ShaderParser/ShaderFormatTemplate/shaderAsset.glsl`（**结构示意，非可编译代码**） |
+| **CMake** | 新增 `ShaderParser.h/.cpp`，并把 `src/Core/ShaderParser` 加进 `target_include_directories` |
+| **新引入的问题** | N18（头文件里只有声明、没有定义的匿名 namespace）、N20（三个 build 入口重复）、N21（解析器静默失败）、N22（include 失败把 `#include` 塞进 GLSL）、N23（每次调用都重新解析）、N24（`Properties` 只是文本）。★ 其中 N19（`IShader` 依赖解析器头）**已修** |
+
 ### 现在的架构一句话总结
 
 > **接口在中间，实现在下层，装配只有一处；渲染管线是一串按 `Stage()` 排序的 Pass，
-> Pass 之间只通过每帧的 `OpenGLRenderContext` 交换数据 —— 加一个效果只需要动 `Passes/` 里的文件。**
+> Pass 之间只通过每帧的 `OpenGLRenderContext` 交换数据 —— 加一个效果只需要动 `Passes/` 里的文件；
+> 而"一个材质需要几个 Pass、每个 Pass 的着色器长什么样"，正在被收进一个 `.shader` 资产文件里。**
 
 **三条验收标准**：
 1. `main.cpp` 里搜不到 `OpenGL` / `glad` / `glfw`（除了两条被注释掉的遗留写法）。
@@ -1859,7 +2109,8 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 
 见 [11.1](#111-shadow-pass--pass-管线) ~ [11.7](#117-下一步按优先级)。
 
-眼下最值得做的三件：
+眼下最值得做的四件：
 1. **关掉三个调试自检**（S14）—— 三行改动，直接拿回一大截帧率；
 2. **抽共享的 `OpenGLStateCache`**（N15）—— 它是"只在变化时才发状态"的前提；
-3. **理顺光照方向语义**（R6）—— 现在有 3 个着色器依赖同一个错误假设，改的时候必须一起改。
+3. **理顺光照方向语义**（R6）—— 现在有 3 个着色器依赖同一个错误假设，改的时候必须一起改；
+4. **修 ShaderParser 的几条硬伤**（N18 / N21 / N22）—— 让失败"响亮地失败"，别留静默错误。

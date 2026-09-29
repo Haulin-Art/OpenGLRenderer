@@ -36,6 +36,7 @@ int main(){
     IShader* shader = renderer->CreateShader(); //
     //shader->BuildFromFiles(vsPath, fsPath);
     std::string shaderAssetPath = std::string(PROJECT_SOURCE_DIR) + "/src/shaders/shaderAssetTemplate.shader";
+    // 使用新的ShaderAsset系统，自动解析并根据 Pass 名称创建 Shader
     shader->BuildFromShaderAsset(shaderAssetPath,"Base");
     Material material(shader);
     material.renderState.depthTest = true;
