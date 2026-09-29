@@ -141,7 +141,7 @@ void SSAOPass::Execute(OpenGLRenderContext& ctx)
     // 看够了就把它改成 false（或者直接删掉这段）。
     // ---------------------------------------------------------
     static bool s_dumpedOnce = false;
-    static constexpr bool kDumpSSAO = true;
+    static constexpr bool kDumpSSAO = false;
     if (kDumpSSAO && !s_dumpedOnce) {
         s_dumpedOnce = true;
 

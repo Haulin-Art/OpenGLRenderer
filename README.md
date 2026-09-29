@@ -731,12 +731,14 @@ G-Buffer / AO / 阴影 / 间接光都**不显示在屏幕上**，所以"没效�
 | Pass | 开关 | 打印什么 | 怎么判断 |
 |---|---|---|---|
 | `GBufferPass` | `kDumpGBuffer = false` | 中心 64×64 块的平均法线、世界深度 min/max/avg | 有几何的像素数应该接近块大小 |
-| `SSAOPass` | `kDumpSSAO = true` | 最低/平均 AO、被遮挡像素占比 | 猴头凹陷处应明显 `< 1`，平面≈1 |
-| `ScreenShadowPass` | `kDumpScreenShadow = true` | 最暗值、平均、阴影占画面比例 | 阴影占画面几个百分点是合理的 |
-| `SSGIPass` | `kDumpSSGI = true` | 有间接光的像素占比、最亮、平均亮度 | **全 0 = 射线一根都没命中** |
+| `SSAOPass` | `kDumpSSAO = false` | 最低/平均 AO、被遮挡像素占比 | 猴头凹陷处应明显 `< 1`，平面≈1 |
+| `ScreenShadowPass` | `kDumpScreenShadow = false` | 最暗值、平均、阴影占画面比例 | 阴影占画面几个百分点是合理的 |
+| `SSGIPass` | `kDumpSSGI = false` | 有间接光的像素占比、最亮、平均亮度 | **全 0 = 射线一根都没命中** |
 | `SSGIBlurPass` | 无 | — | 它的输入就是上面那张，所以先看 `SSGIPass` 的输出即可 |
 
-**看够了就把对应开关改成 `false`**（见 11.6 清理项）。
+> ✅ **四个开关现在默认都是 `false`**（S14 已修）—— 常态运行不会 `glReadPixels`、也不会往控制台刷统计。
+> 想排查哪个 Pass，就把对应的那一个改成 `true`，看够了再改回来。
+> （**别常态开着**：`glReadPixels` 会强制 GPU 同步、整张纹理读回来，代价很大。）
 
 **另一种更直接的调试法**：把中间纹理当灰度图打出来 ——
 比如临时把 `basicfrag` 的 `fragColor` 改成 `vec4(vec3(texture(screenShadow, screenUV).r), 1.0)`：
@@ -1922,7 +1924,7 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 
 | # | 问题 | 后果 | 建议 |
 |---|---|---|---|
-| **S14** | **3 个 Pass 的调试自检默认是开着的**：`SSAOPass::kDumpSSAO = true`、`ScreenShadowPass::kDumpScreenShadow = true`、`SSGIPass::kDumpSSGI = true` | 每次运行都会 `glReadPixels` **整张纹理**一次（`glReadPixels` 会强制 GPU 同步，很慢），并且往控制台打印几行统计 | 看够了改成 `false`（`GBufferPass::kDumpGBuffer` 已经是 `false`，照它改）；或者干脆收进一个宏，Release 下一律不编 |
+| **S14** | ✅ **已修** | ~~3 个 Pass 的调试自检默认是开着的~~（`SSAOPass::kDumpSSAO` / `ScreenShadowPass::kDumpScreenShadow` / `SSGIPass::kDumpSSGI`）—— 每次运行都会 `glReadPixels` **整张纹理**一次（强制 GPU 同步，很慢），并往控制台打印几行统计 | 四个 `kDump*` 现在**默认全是 `false`**（和 `GBufferPass::kDumpGBuffer` 一致）。★ 还能再进一步：把它们收进一个宏 / 做成运行时可配，Release 下一律不编 |
 | **S15** | `FullscreenQuad` 的 VAO 是**每个全屏 Pass 各自建一个**（6 个 Pass 各持有一个） | 6 个空 VAO —— 功能上无所谓，但本可以共用一个 | 抽成 renderer 级/静态的单例，或者放进 `ctx` 让全屏 Pass 共用 |
 | **S16** | 每个 Pass 自己缓存了 `mWidth/mHeight`，而 `BasePass` 用的是 `ctx.fbWidth/fbHeight` | 在"窗口尺寸刚变、但本帧的 Pass 用的是上一帧尺寸"的边界上可能有一帧错配 | 统一从 `ctx` 取尺寸；或者把"帧尺寸"作为不可变快照，在帧开始时一次定好 |
 
@@ -2000,7 +2002,7 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 - `OpenGLMesh.h` / `OpenGLMesh.cpp`：注释里的"每个顶点 6 个 float / stride 24"已过时（实际 8 个 / 32）
 - `OpenGLRenderer.h`：`window` 是 public，建议改 private
 - `OpenGLRenderer.h`：`lightPos` 注释写着"渲染器暂时替场景保管"，实际已经是唯一真相源；将来要抽成 `Scene`/`FrameData`
-- **3 个 Pass 的调试自检默认是开的**（`kDumpSSAO` / `kDumpScreenShadow` / `kDumpSSGI`）→ 改成 `false`（S14）
+- ✅ **已修（S14）**：四个 `kDump*` 调试自检现在默认都是 `false`
 - `Resources/ResourceManager.h`：空文件
 - `目标渲染架构.md`：内容已严重过时（见 7.6）
 - `mesh/*.mtl`：文件里只有注释、没有材质定义，所以模型用默认材质
@@ -2008,25 +2010,26 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 
 ### 11.7 下一步（按优先级）
 
-1. **关掉调试自检**（S14）—— 三行改动，直接拿回一大截帧率：`kDumpSSAO` / `kDumpScreenShadow` / `kDumpSSGI` 改成 `false`
-2. **抽共享的 `OpenGLStateCache`**（N15 / 9.4）—— 放进 `ctx`，让所有 Pass 共用。
+> ✅ 原第 1 条（**关掉调试自检**，S14）**已完成**，下面从原第 2 条开始重新编号。
+
+1. **抽共享的 `OpenGLStateCache`**（N15 / 9.4）—— 放进 `ctx`，让所有 Pass 共用。
    这是把"无条件发状态"换回"只在变化时才发"的**前提**，也是唯一能让缓存与 GL 真实状态保持一致的形态
-3. **理顺"光照方向"的语义**（R6）—— `mainLightPos` 是灯的位置却被当方向用，
+2. **理顺"光照方向"的语义**（R6）—— `mainLightPos` 是灯的位置却被当方向用，
    现在有三个着色器依赖这个（错误的）假设。**改的时候三处要一起改**，否则又会出现"着色的光和投影的光不一致"那类 bug
-4. **修 RenderQueue / `Set*` 的热点**（N9 / R5）—— `RenderQueue` 预计算 key（现在每帧多算了 `O(n log n)` 次 `dot`）；
+3. **修 RenderQueue / `Set*` 的热点**（N9 / R5）—— `RenderQueue` 预计算 key（现在每帧多算了 `O(n log n)` 次 `dot`）；
    `OpenGLShader` 缓存 uniform location（Pass 化之后每帧 `Set*` 次数是原来的好几倍）
-5. **`Material::castShadow` / `receivesShadow` / `inGBuffer`**（S4）—— 现在有 2 处靠 `blend != Opaque` 猜意图
-6. **修摄像机输入通路**（C1 / C2 / C3）—— 恢复 `if(dragging)`、删掉自转、注册回调
-7. **`RT` 的绑定/解绑收口** —— 引入 `IRenderTarget`（`Bind()` / `Unbind()` 内部管 FBO + 视口），
+4. **`Material::castShadow` / `receivesShadow` / `inGBuffer`**（S4）—— 现在有 2 处靠 `blend != Opaque` 猜意图
+5. **修摄像机输入通路**（C1 / C2 / C3）—— 恢复 `if(dragging)`、删掉自转、注册回调
+6. **`RT` 的绑定/解绑收口** —— 引入 `IRenderTarget`（`Bind()` / `Unbind()` 内部管 FBO + 视口），
    顺便解决 S16（尺寸来源不一）、S15（6 个重复的空 VAO）、以及"每个全屏 Pass 都要抄一遍收尾四行"
-8. **合并三个模糊 Pass**（N16）—— `SSAOBlur` / `ScreenShadowBlur` / `SSGIBlur` 是同一个算法的三种权重组合，
+7. **合并三个模糊 Pass**（N16）—— `SSAOBlur` / `ScreenShadowBlur` / `SSGIBlur` 是同一个算法的三种权重组合，
    值得抽成一个可配的"模糊 Pass"
-9. **ShaderParser 的几条硬伤**（N18 / N21 / N22）—— 都是几行改动，但能一次消掉
+8. **ShaderParser 的几条硬伤**（N18 / N21 / N22）—— 都是几行改动，但能一次消掉
    "**静默失败**"和"**错误信息把人带偏**"这两类最难查的问题。顺带把 `Properties` 做成结构化（N24），
    为"自动生成 Material 参数 + 自动缓存 uniform location"铺路 —— 这是"资产格式"真正开始有价值的下一步
-10. **再往后** —— `FrameData`（把光源/清屏色也变成"每帧传一次"）、`Scene` 层、`ResourceManager`、
-    **把 `目标渲染架构.md` 更新到与 Pass 管线一致**、`PostProcess` Pass（色调映射/泛光）、SSRT（屏幕空间反射）、
-    以及 S12 提到的 Vulkan 后端（注意：Pass 管线本身是 OpenGL 专属的，那边要重做一套）
+9. **再往后** —— `FrameData`（把光源/清屏色也变成"每帧传一次"）、`Scene` 层、`ResourceManager`、
+   **把 `目标渲染架构.md` 更新到与 Pass 管线一致**、`PostProcess` Pass（色调映射/泛光）、SSRT（屏幕空间反射）、
+   以及 S12 提到的 Vulkan 后端（注意：Pass 管线本身是 OpenGL 专属的，那边要重做一套）
 
 ---
 
@@ -2079,7 +2082,7 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 | **`GetWindowSize()`** | 返回构造时的固定值（C5） | 实时 `glfwGetFramebufferSize` |
 | **resize** | 不处理（C4） | 每帧比较尺寸 → `OnResize` → 各 Pass 重建自己的屏幕尺寸 RT；视口一律用 `ctx.fbWidth/fbHeight`（C5 / S13 一起修） |
 | **一次性修掉的老问题** | — | S1（资源不释放）、S2（纹理解绑/反馈循环）、S3（死代码）、S5（`1024` 硬编码）、S6（灯光矩阵算两遍 + 死函数）、S7（每物体重算 `P*V`）、S11（`InitShadowPass` public）、C4、C5、S13 |
-| **新引入的问题** | — | S14（调试自检默认开着，含 `glReadPixels`）、S15（6 个重复的空 VAO）、S16（各 Pass 自缓存尺寸）、N15（没有共享状态缓存）、N16（三个模糊着色器重复）、N17（编译失败仍返回 shader） |
+| **新引入的问题** | — | S15（6 个重复的空 VAO）、S16（各 Pass 自缓存尺寸）、N15（没有共享状态缓存）、N16（三个模糊着色器重复）、N17（编译失败仍返回 shader）。★ S14（调试自检默认开着、含 `glReadPixels`）**已修** |
 
 ### 第四轮：Shader 资产格式 + 解析器（★ 最新）
 
@@ -2109,8 +2112,7 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 
 见 [11.1](#111-shadow-pass--pass-管线) ~ [11.7](#117-下一步按优先级)。
 
-眼下最值得做的四件：
-1. **关掉三个调试自检**（S14）—— 三行改动，直接拿回一大截帧率；
-2. **抽共享的 `OpenGLStateCache`**（N15）—— 它是"只在变化时才发状态"的前提；
-3. **理顺光照方向语义**（R6）—— 现在有 3 个着色器依赖同一个错误假设，改的时候必须一起改；
-4. **修 ShaderParser 的几条硬伤**（N18 / N21 / N22）—— 让失败"响亮地失败"，别留静默错误。
+眼下最值得做的三件（原第 1 条"关掉调试自检" ✅ 已完成）：
+1. **抽共享的 `OpenGLStateCache`**（N15）—— 它是"只在变化时才发状态"的前提；
+2. **理顺光照方向语义**（R6）—— 现在有 3 个着色器依赖同一个错误假设，改的时候必须一起改；
+3. **修 ShaderParser 的几条硬伤**（N18 / N21 / N22）—— 让失败"响亮地失败"，别留静默错误。

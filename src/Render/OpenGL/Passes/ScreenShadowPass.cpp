@@ -126,7 +126,7 @@ void ScreenShadowPass::Execute(OpenGLRenderContext& ctx)
     // 调试自检：阴影纹理也是"看不见"的（要等 BasePass 采样才看得出），
     // 读回来打一行统计。看够了改成 false。
     static bool s_dumpedOnce = false;
-    static constexpr bool kDumpScreenShadow = true;
+    static constexpr bool kDumpScreenShadow = false;
     if (kDumpScreenShadow && !s_dumpedOnce) {
         s_dumpedOnce = true;
 

@@ -187,7 +187,7 @@ void SSGIPass::Execute(OpenGLRenderContext& ctx)
     //   想安静就把它改成 false。
     // ---------------------------------------------------------
     static bool s_dumpedOnce = false;
-    static constexpr bool kDumpSSGI = true;
+    static constexpr bool kDumpSSGI = false;
     if (kDumpSSGI && !s_dumpedOnce) {
         s_dumpedOnce = true;
 
