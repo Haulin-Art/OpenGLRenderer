@@ -2,7 +2,7 @@
 
 一个从零手写的 OpenGL 渲染引擎（学习项目），目标是把"散落在 main 里的 OpenGL 调用"逐步重构成一套分层的渲染架构。
 
-**技术栈**：C++17 · OpenGL 4.6 Core Profile · GLFW · GLAD · GLM · tinyobjloader
+**技术栈**：C++17 · OpenGL 4.6 Core Profile · **Vulkan 1.4**（第二个后端，目前只画一个三角形）· GLFW · GLAD · GLM · tinyobjloader
 
 **当前能跑出来的东西**：一个轨道摄像机视角下，猴头模型（不透明、灯在斜上方所以顶部最亮）**把影子投在下方的白色平板上**，外加一片半透明的无限网格地面。猴头的凹陷处有屏幕空间环境光遮蔽（SSAO）压暗，物体之间有屏幕空间间接光（SSGI）互相"漏"一点光，阴影边缘是屏幕空间 PCSS 算出的柔和半影。另外**材质已经能带颜色**（`Material::baseColor`），所以画面上有白/红/绿三个平面可用于验证 SSGI 的颜色渗透。
 
@@ -19,6 +19,9 @@
 - **PCSS 已经从材质着色器里搬到了屏幕空间**：`basicfrag.glsl` 只剩 3 次纹理采样（阴影 / AO / 间接光），不再自己跑 32 次采样的 blocker search。
 - **SSGI 可以运行时开关**（按 **G**）；关掉时纹理被清成 0，画面与"没有 SSGI"逐像素一致。
 - **材质带颜色**：`Material::baseColor`（+ `IShader::SetVec3`），在 `BasicPass` 里作为 `baseColor` uniform 传给着色器。
+- ★ **第二个后端已接入（实验性）**：`Render/Vulkan/VulkanRenderer.cpp` 能用 Vulkan 画出**一个三角形** —— 13 步初始化 + 每帧 acquire/record/submit/present 全通，实测 2 万帧无异常。
+  `CMakeLists.txt` 已经接线，改 `config.h` 一个宏就能来回切；**`main.cpp` 一个字都不用改**（靠空实现的 `CreateShader`/`CreateMesh` + 空操作的 `Clear`/`SwapBuffers`）。
+  但**它现在还没有 `VulkanMesh` / `VulkanShader`，而 Pass 管线仍是 OpenGL 专属的** —— 详见 [4.5](#45-vulkan-后端现状第二个后端)。
 
 > **一个反复出现的结构**：只要一个效果"**算一遍会带噪点**"，就需要"**算 → 再起一趟去噪**"（两张纹理、两个 Pass）
 > —— 因为模糊要读邻居的值，而那个值正是这一趟正在写的纹理（同一张纹理既读又写 = 反馈循环）。
@@ -62,6 +65,68 @@
 | GLFW | 预编译静态库（`lib-mingw-w64/libglfw3.a` 等） | 窗口 / 上下文 / 输入 |
 | GLM | 纯头文件 | 数学（vec3 / mat4 / perspective / lookAt / ortho） |
 | tinyobjloader | 纯头文件 | 解析 `.obj` 模型 |
+| **Vulkan-Headers** | 纯头文件（Khronos 官方；已裁掉 C++ 绑定 `.hpp`，省 20MB） | `Render/Vulkan/` 需要 `<vulkan/vulkan.h>` |
+| **libvulkan-1.a** | 预编译导入库（209KB，用 `gendef` + `dlltool` 从**系统** `vulkan-1.dll` 造出来） | Vulkan 后端的链接 |
+| **glslang.exe** | 预编译命令行工具（5MB，**静态链接的单文件**，不依赖旁边的 DLL） | 把 Vulkan 的 GLSL 编译成 SPIR-V（`.spv`） |
+
+### Vulkan 后端（实验性）的额外前提
+
+**运行前需要**（本机已逐项实测通过）：
+
+| 检查项 | 怎么看 | 本机实测 |
+|---|---|---|
+| 支持 Vulkan 的显卡 + 驱动 | 看 `C:\Windows\System32\DriverStore\FileRepository\*\nv-vk64.json` 是否存在 | ✅ NVIDIA RTX 3060 Laptop，驱动带 `nv-vk64.json` |
+| Vulkan loader | `C:\Windows\System32\vulkan-1.dll`（Windows 10+ **系统自带**，不用装 SDK） | ✅ 1.4.303.0 |
+| 能枚举到物理设备 | 见下面那段自检代码 | ✅ 1 张，api 1.4.303，6 个队列族 |
+
+> ⚠️ 本机 `HKLM\SOFTWARE\Khronos\Vulkan\Drivers` 注册表键是**缺失**的（NVIDIA 装驱动时没写），
+> 但 loader 仍然自己找到了驱动（已实测），所以不影响。万一枚举不到设备，
+> 可以设环境变量 `VK_ICD_FILENAMES` 指向那个 `nv-vk64.json` 绕过。
+
+**为什么不用 `find_package(Vulkan REQUIRED)`**：CMake 自带那个模块要找 `VULKAN_SDK` 环境变量（得装官方 SDK）。
+本项目走"随仓库分发导入库"的路子 —— 见 `CMakeLists.txt` 里"第三方库 5: Vulkan"那段注释。
+
+**想重新生成导入库**（换机器 / loader 大版本升级时才需要）：
+```bash
+cd dependencies/vulkan
+# 1) 从系统 DLL 导出符号表（vulkan-1.def 已提交，一般不用重跑）
+"$W64DEVKIT/bin/gendef.exe" C:/Windows/System32/vulkan-1.dll
+# 2) 把 .def 变成 MinGW 能用的静态导入库
+#    ★ 只需要 .def，不需要 DLL 本体 —— 所以仓库里不用放那个 1.5MB 的副本
+"$W64DEVKIT/bin/dlltool.exe" -d vulkan-1.def -l libvulkan-1.a -D vulkan-1.dll
+```
+
+**改了 Vulkan 的着色器要重新编译成 SPIR-V**（`.spv` 已提交，**运行期不会调 glslang**）：
+```bash
+dependencies/glslang/bin/glslang.exe -V --target-env vulkan1.1 \
+    src/shaders/vulkan_triangle.vert -o src/shaders/vulkan_triangle.vert.spv
+dependencies/glslang/bin/glslang.exe -V --target-env vulkan1.1 \
+    src/shaders/vulkan_triangle.frag -o src/shaders/vulkan_triangle.frag.spv
+```
+> 忘了 `-V` 生成的就是普通文本而不是 SPIR-V —— `VulkanRenderer::ReadFileBytes` 会校验魔数并**明确报错**，
+> 不会让你拿到一个含糊的失败码。（`--target-env` 也可用 `vulkan1.0`，三角形用不到更新的特性。）
+
+**枚举物理设备的自检程序**（想确认某台机器能不能跑 Vulkan 时，30 行就能测出来）：
+```cpp
+#include <vulkan/vulkan.h>
+#include <cstdio>
+#include <vector>
+int main() {
+    VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    app.apiVersion = VK_API_VERSION_1_0;
+    VkInstanceCreateInfo ci{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    ci.pApplicationInfo = &app;
+    VkInstance inst = VK_NULL_HANDLE;
+    if (vkCreateInstance(&ci, nullptr, &inst) != VK_SUCCESS) { printf("no loader\n"); return 1; }
+    uint32_t n = 0; vkEnumeratePhysicalDevices(inst, &n, nullptr);
+    printf("physical devices = %u\n", n);
+    std::vector<VkPhysicalDevice> d(n); vkEnumeratePhysicalDevices(inst, &n, d.data());
+    for (auto dev : d) { VkPhysicalDeviceProperties p{}; vkGetPhysicalDeviceProperties(dev, &p);
+        printf("  %s  api=%u.%u.%u\n", p.deviceName, VK_VERSION_MAJOR(p.apiVersion),
+               VK_VERSION_MINOR(p.apiVersion), VK_VERSION_PATCH(p.apiVersion)); }
+    vkDestroyInstance(inst, nullptr);
+}
+```
 
 ### 构建与运行
 
@@ -82,11 +147,27 @@ build/OpenGLRenderer.exe
 3. **改完 `CMakeLists.txt` 要重新跑一次 `cmake -S . -B build`**（改 CMake 脚本不会自动重配置）。
 4. **切换渲染后端要改 `src/config.h` 里的宏**（见 [第四节](#四后端选择机制宏--工厂)），改完同样要重新编译。
 
-### `.gitignore` 的一个坑（已修）
+### `.gitignore` 里的两个坑（都已修）
 
+**① `*.obj` 撞上了 3D 模型**
 `# Compiled Object files` 里那条 `*.obj` 原本是给 MSVC 目标文件用的，但**Wavefront 的 3D 模型扩展名也是 `.obj`**，会把 `src/mesh/*.obj` 一并忽略。
-现在文件末尾的"例外区"里加了 `!src/mesh/*.obj` 放行（同一条规则还救了 GLFW 的 `lib-*` 预编译库）。
+文件末尾的"例外区"里加了 `!src/mesh/*.obj` 放行（同一条规则还救了 GLFW 的 `lib-*` 预编译库）。
 **以后新增模型目录，在例外区照抄一行即可。**
+
+**② `*.a` / `*.exe` 把 Vulkan 的依赖也吃掉了**
+`*.a` 会忽略 `dependencies/vulkan/libvulkan-1.a`（**链接必须**），`*.exe` 会忽略 `dependencies/glslang/bin/glslang.exe`。
+→ 例外区里放行了这三样：`libvulkan-1.a`、`vulkan-1.def`、`glslang.exe`（**共约 5.5MB**）。
+
+反过来说，另外几样**故意不进仓库**（能省 ~83MB，见例外区第 4 条）：
+
+| 不进仓库的 | 为什么 | 大小 |
+|---|---|---|
+| `dependencies/vulkan/include/vulkan/*.hpp` / `*.cppm` | Vulkan-Hpp 的 C++ 绑定，本项目只用纯 C 接口 | ~20 MB |
+| `dependencies/vulkan/vulkan-1.dll` | 系统 DLL 的副本；**运行不需要**（System32 里有），重造 `.a` 也只用 `.def` | 1.5 MB |
+| `dependencies/glslang/lib/` / `include/` | 把 glslang 当**库嵌入**才需要；我们只调它的命令行 exe（静态链接） | 63 MB |
+
+> **判断标准**：`clone` 下来能不能"直接 `cmake --build` 就成功"。
+> 头部 + `.a` + `.spv` 决定这件事；`.hpp` / `lib/` / DLL 副本都不影响，所以不进。
 
 ---
 
@@ -146,7 +227,8 @@ OpenGLRenderer/
     │   │       ├── SSGIBlurPass.h/.cpp       给 SSGI 去噪（深度 + 法线加权双边模糊）
     │   │       └── BasePass.h/.cpp           用材质把队列画一遍（唯一"有画面输出"的 Pass）
     │   └── Vulkan/
-    │       └── VulkanRenderer.h      ⬜ 占位：只有声明，没有 .cpp，未实现
+    │       ├── VulkanRenderer.h      ✅ 接口实现 + 顶部五段导读（心智模型/顺序/时间线/接入清单）
+    │       └── VulkanRenderer.cpp    ✅ 最小三角形：13 步初始化 + 每帧 acquire/record/submit/present
     │
     ├── ObjLoader.h / ObjLoader.cpp   ✅ OBJ 解析 + 顶点展开
     │
@@ -314,17 +396,44 @@ IRenderer* CreateRenderer(int width, int height);
 
 ### 4.4 加一个 Vulkan 后端要做什么
 
-1. 实现 `Render/Vulkan/VulkanRenderer.cpp`（+ `VulkanShader` / `VulkanMesh`）。
-2. 在 `CMakeLists.txt` 里加上新 `.cpp`，并把 `src/Render/Vulkan` 加进 `target_include_directories`。
+1. 实现 `Render/Vulkan/VulkanRenderer.cpp`（+ `VulkanShader` / `VulkanMesh`）。 ← ✅ 已做（"能画三角形"这一步）
+2. 在 `CMakeLists.txt` 里加上新 `.cpp`，并把 `src/Render/Vulkan` 加进 `target_include_directories`。 ← ✅ 已做
 3. 把 `config.h` 里的宏换成 `#define VULKAN_RENDERER`。
 4. `RendererFactory.h` / `RendererFactory.cpp` 里的 `#elif defined(VULKAN_RENDERER)` 分支**已经写好了**。
-5. `main.cpp` **一个字都不用动**。
+5. `main.cpp` **一个字都不用动**。 ← ✅ **实测成立**（见 4.5）
 
 > ⚠️ 后端清单在 `RendererFactory.h` 和 `RendererFactory.cpp` **两个文件里各有一份**，加后端时两处都要同步。
->
-> ⚠️ `VulkanRenderer.h` 目前只是声明、没有 `.cpp`，所以切过去会**链接失败**（见 11.1 的 S12）。
-> 更要紧的是：**Pass 管线（`Passes/OpenGLRenderPass.h` 和那 8 个 Pass）本身是 OpenGL 专属的**，
-> `OpenGLRenderContext` 里直接存着 `unsigned int` 纹理句柄。换后端不是"补一个 `.cpp`"就完事，那套东西要重做一遍。
+
+### 4.5 Vulkan 后端现状（第二个后端）
+
+**现在做到哪**：`VulkanRenderer` 能用 Vulkan 画出一个**三角形**（红绿蓝渐变，顶点数据写在顶点着色器里，
+不依赖任何顶点缓冲）。13 步初始化全通、每帧 acquire/record/submit/present 全通 —— 实测跑过 2 万帧无异常。
+
+**代码怎么读**：`VulkanRenderer.h` 顶部有五段导读，按它读最快 ——
+【一】OpenGL→Vulkan 心智模型对照表 ·【二】13 步初始化依赖链 ·【三】每帧时间线（为什么三角形也要 4 个同步对象）
+·【四】接入清单 ·【五】刻意不做的功能。`VulkanRenderer.cpp` 顶部另有一份"阅读顺序 + 6 个经典坑索引"。
+
+**它现在【还没有】什么**（所以切过去只能看到三角形，看不到猴头）：
+
+| 缺什么 | 后果 |
+|---|---|
+| `VulkanMesh`（顶点缓冲 + staging buffer + 显存分配） | `CreateMesh()` 返回**空实现**，画不出任何模型 |
+| `VulkanShader` | `CreateShader()` 返回**空实现**；Vulkan 只认 SPIR-V，现有那 18 个 `.glsl` 一个都用不上 |
+| `ExecuteRenderCommands` 真的去消费渲染队列 | 现在**忽略**队列，只画那个焊死在裁剪空间的三角形 |
+| descriptor set / uniform buffer | 没有相机矩阵、灯光、纹理 —— `pipeline layout` 是空的 |
+| shader 自动编译（CMake `add_custom_command`） | 改 `.vert/.frag` 后要**手动**跑一次 glslang（命令见第 1 节） |
+| 交换链格式变化处理 | 窗口被拖到别的显示器 / HDR 开关改变时会打警告，但不会重建 render pass（缩放窗口不受影响） |
+| validation layer | 需要装 Vulkan SDK 的层；没装所以默认关闭。**强烈建议装上并打开**（`CreateInstance` 里留了注释） |
+
+> ★ **最关键的一条**：`Passes/` 那 8 个 Pass 是 **OpenGL 专属**的 ——
+> `OpenGLRenderContext` 里直接存 `unsigned int` 纹理句柄，每个 Pass 都直接调 `gl*`。
+> **这部分对 Vulkan 完全不可复用，要重做一套**（`openGLRenderPass` 那套 `Setup/OnResize/Execute/Stage`
+> 的思路可以照搬，但资源句柄和上下文必须换成后端无关的形态）。
+> 所以"两个后端画面一致"的真正难点不在 Vulkan API，而在**把 Pass 管线的抽象上移**：
+> 哪些概念该上移到 `Render/`（比如"一个 Pass 声明自己的输入输出资源"），哪些必须留在后端。
+
+**切回 OpenGL**：把 `config.h` 的宏改回 `OPENGL_RENDERER` 重新编译即可。
+两个后端的代码**互不认识**（`OpenGLRenderer.h` 永不 include `VulkanRenderer.h`，反之亦然），可以长期共存。
 
 ---
 
@@ -1431,12 +1540,41 @@ BuildFromShaderAsset(资产, Pass) ─┘  ← 解析资产 → 取该 Pass 的�
 
 ---
 
-#### `src/Render/Vulkan/VulkanRenderer.h` ⬜（占位）
+#### `src/Render/Vulkan/VulkanRenderer.h` / `.cpp` ✅（最小三角形）
 
-复刻了 `IRenderer` 的接口清单，**只有 `.h`、没有 `.cpp`、没有任何实现**。
-现在 `VULKAN_RENDERER` 没定义所以不参与编译；一旦切过去会**链接失败**（一堆 `undefined reference`）。建议标注 `// TODO: 未实现` 或先从 CMake 清单里拿掉（S12）。
+**职责**：第二个后端。目前只做到**"用 Vulkan 画出一个三角形"**，但初始化链和每帧循环是完整、正确的。
 
-> ⚠️ **一个比"没写 `.cpp`"更根本的问题**：现在的渲染架构是 **OpenGL 专属**的 ——
+```
+VulkanRenderer.h    接口实现 + 五段导读注释（心智模型 / 13 步依赖链 / 每帧时间线 / 接入清单 / 不做的功能）
+VulkanRenderer.cpp  13 步初始化 + DrawFrame（acquire → 录制 → 提交 → present）+ Cleanup（严格逆序）
+```
+
+**13 步初始化**（每一步的"为什么必须是这个顺序"写在 `.h` 的【二】里）：
+```
+CreateWindow → CreateInstance → CreateSurface → PickPhysicalDevice → CreateLogicalDevice
+→ CreateSwapchain → CreateImageViews → CreateRenderPass → CreateGraphicsPipeline
+→ CreateFramebuffers → CreateCommandPool → CreateCommandBuffers → CreateSyncObjects
+```
+**每帧**：`vkWaitForFences` → 比较窗口尺寸（变了就重建交换链）→ `vkAcquireNextImageKHR`
+→ `vkResetFences` → 录制命令缓冲 → `vkQueueSubmit` → `vkQueuePresentKHR`。
+
+**和 `IRenderer` 的对接方式**（这是 `main.cpp` 不用改的原因）：
+
+| 接口 | Vulkan 实现 |
+|---|---|
+| `CreateShader()` / `CreateMesh()` | `VulkanRenderer.cpp` 里匿名命名空间的**空实现** `NullShader` / `NullMesh`（不能返回 `nullptr`，上层会立刻调用它们） |
+| `Clear()` | 只记录清屏色 —— 真正的清屏是 render pass 的 `loadOp = CLEAR` |
+| `ExecuteRenderCommands()` | **忽略渲染队列**，直接画三角形（所以 `main.cpp` 的循环不用动就能看到画面） |
+| `SwapBuffers()` | 空实现 —— 呈现已经发生在 `ExecuteRenderCommands` 里的 `vkQueuePresentKHR` |
+| `Enable/DisableRendererFeature()` | 空实现 —— Vulkan **没有全局渲染状态**，深度/混合/剔面全冻结在 `VkPipeline` 里 |
+
+**已知限制**：
+1. 只有三角形：没有 `VulkanMesh` / `VulkanShader`，不吃渲染队列，没有 uniform/纹理（详见 [4.5](#45-vulkan-后端现状第二个后端)）
+2. 交换链格式变化（拖到别的显示器/HDR）只警告不重建 render pass
+3. 没开 validation layer（需要 Vulkan SDK 的层）—— **建议装上后打开，Vulkan 的错误基本靠它报**
+4. `ExecuteRenderCommands` 一次调用 = 一帧（acquire + submit + present 都在一起），不是"提交/显示分离"的形态
+
+> ⚠️ **比"没写 VulkanMesh"更根本的问题**：现在的渲染架构是 **OpenGL 专属**的 ——
 > `Passes/OpenGLRenderPass.h` 里的 `OpenGLRenderContext` 直接存 `unsigned int` 纹理句柄，
 > 8 个 Pass 也全部直接调 `gl*`。**这部分代码对 Vulkan 后端完全不可复用**，
 > 换后端不是"补一个 `.cpp`"就完事。真要做的时候要先想清楚：
@@ -1445,6 +1583,28 @@ BuildFromShaderAsset(资产, Pass) ─┘  ← 解析资产 → 取该 Pass 的�
 ---
 
 ### 7.5 工具与资源
+
+---
+
+#### `dependencies/vulkan/` ✅（Vulkan 后端依赖，随仓库分发）
+
+| 内容 | 说明 |
+|---|---|
+| `include/vulkan/*.h` + `include/vk_video/*.h` | Khronos 官方 Vulkan-Headers（纯 C 部分）。★ `vk_video/` 是 `vulkan/` 的**同级目录**（不是子目录）——《vulkan_core.h》里用 `#include "vk_video/..."` 引用它，所以 `-I` 要指向 `include/` 而不是 `include/vulkan/` |
+| `libvulkan-1.a` | MinGW 导入库，`gendef` + `dlltool` 从**系统** `C:\Windows\System32\vulkan-1.dll` 现场生成（209KB） |
+| `vulkan-1.def` | 导出表；重造 `.a` 只需要它（**不需要** DLL 本体，所以那个 1.5MB 的副本没进仓库） |
+
+**已知坑**：Vulkan-Headers 的 `main` 分支源码 zip **不含 `vk_video/`**（GitHub 的源码归档不带它），
+单文件下载也会 404 —— 要从**完整仓库**里取 `include/vk_video/`。
+
+#### `dependencies/glslang/` ✅（GLSL → SPIR-V 编译器，随仓库分发）
+
+| 内容 | 说明 |
+|---|---|
+| `bin/glslang.exe` | 5MB **静态链接单文件**（16.6.0），`bin/` 下没有别的 DLL，可以直接拷走用 |
+| `lib/` + `include/` | 把 glslang **当库嵌入**时才需要（63MB）→ **没进仓库**，本地留着也不影响 |
+
+命令行用法：`glslang.exe -V --target-env vulkan1.1 <输入> -o <输出.spv>`（`-V` = 生成 Vulkan SPIR-V，忘了它就不是二进制）。
 
 ---
 
@@ -1770,7 +1930,7 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 
 > 对没有声明该 uniform 的 shader 调用无害：`glGetUniformLocation` 返回 -1，而 `glUniform*` 在 location 为 -1 时**被规范要求忽略**。
 
-### 10.3 着色器清单（18 个文件 / 11 个 program）
+### 10.3 着色器清单（18 个 GLSL 文件 / 11 个 program，另有 2 个 Vulkan SPIR-V）
 
 | 着色器 | 用途 | 说明 |
 |---|---|---|
@@ -1786,6 +1946,7 @@ layout (location = 2) in vec2 aTexCoor;  // UV，  偏移 24 字节
 | `screen_shadow_frag` / `screen_shadow_blur_frag` | `ScreenShadowPass` / `ScreenShadowBlurPass` | 屏幕空间 PCSS（blocker search + 可变半径 PCF）；双边模糊去噪 |
 | `ssgi_frag` | `SSGIPass` | 单次弹射：24 射线 × 24 步屏幕空间步进 + 余弦加权 + 厚度上界 + 背面剔除 |
 | `ssgi_blur_frag` | `SSGIBlurPass` | 9×9 深度 + 法线加权双边模糊（去 GI 噪点） |
+| ★ `vulkan_triangle.vert` / `.frag`（+ 2 个 `.spv`） | `VulkanRenderer` 的三角形 | **Vulkan 专属**，和上面那一整套无关：没有顶点缓冲（顶点数据写在着色器里、用 `gl_VertexIndex` 索引）；用 `glslang -V` 编成 SPIR-V，运行期读 `.spv`。注意 Vulkan 的裁剪空间 **y 轴向下**（"尖朝上"是负 y），而且绕序和 OpenGL 相反 |
 
 > **地面（栅格）不参与屏幕空间效果是设计选择** —— 它是纯可视化用的辅助栅格（带坐标轴），
 > 不接收光照/阴影/AO/SSGI，所以 `groundNetFrag` 里连 `aoMap` 都没声明。
@@ -1917,7 +2078,7 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 | **S9** | 🚧 **部分** | PCSS 参数硬编码 | `kPCSSBias` / `kPCSSSearchTexel` / `kPCSSLightTexel` / `kPCSSBlockerEps` 现在是 `screen_shadow_frag.glsl` 顶部的具名常量，**但仍然是编译期常量** —— 调参要改源码 + 重编，还没提成 uniform |
 | ~~S10~~ | — | ~~`groundNetFrag.glsl` 不采样阴影图~~ | **按设计如此，不是缺陷**：地面是纯可视化用的栅格（含坐标轴），不参与光照/阴影 |
 | **S11** | ✅ **已修** | `InitShadowPass()` 是 public | 该函数已删除（逻辑全在 `ShadowPass` 内部） |
-| **S12** | ⬜ **仍然存在** | `VulkanRenderer.h` 只有声明、没有 `.cpp` | 切到 `VULKAN_RENDERER` 会链接失败。**注意：Pass 管线是 OpenGL 专属的，Vulkan 后端要重做一套**，所以这条比以前更"重"了 |
+| **S12** | ✅ **已修（部分）** | ~~`VulkanRenderer.h` 只有声明、没有 `.cpp`~~ | `.cpp` 已经写了（能画三角形），`CMakeLists` 也接线了，切宏即可来回切。**但"两个后端画面一致"还很远**：没有 `VulkanMesh` / `VulkanShader` / uniform / 纹理，而且 **Pass 管线是 OpenGL 专属的、要重做一套** —— 见 [4.5](#45-vulkan-后端现状第二个后端) |
 | **S13** | ✅ **已修** | 恢复视口用的是逻辑窗口尺寸 | 现在所有 Pass 都用 `ctx.fbWidth/fbHeight`（来自 `glfwGetFramebufferSize`）恢复视口 |
 
 **Pass 化新引入/暴露的问题**：
@@ -2029,7 +2190,8 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
    为"自动生成 Material 参数 + 自动缓存 uniform location"铺路 —— 这是"资产格式"真正开始有价值的下一步
 9. **再往后** —— `FrameData`（把光源/清屏色也变成"每帧传一次"）、`Scene` 层、`ResourceManager`、
    **把 `目标渲染架构.md` 更新到与 Pass 管线一致**、`PostProcess` Pass（色调映射/泛光）、SSRT（屏幕空间反射）、
-   以及 S12 提到的 Vulkan 后端（注意：Pass 管线本身是 OpenGL 专属的，那边要重做一套）
+   以及 **Vulkan 后端继续往下做** —— 骨架和三角形已经有了（见 4.5），下一步是 `VulkanMesh`（顶点缓冲 + 显存分配）
+   → `VulkanShader` → 再往后才是"把 Pass 管线的抽象上移"。注意 Pass 管线本身是 OpenGL 专属的，那边要重做一套
 
 ---
 
@@ -2084,7 +2246,7 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 | **一次性修掉的老问题** | — | S1（资源不释放）、S2（纹理解绑/反馈循环）、S3（死代码）、S5（`1024` 硬编码）、S6（灯光矩阵算两遍 + 死函数）、S7（每物体重算 `P*V`）、S11（`InitShadowPass` public）、C4、C5、S13 |
 | **新引入的问题** | — | S15（6 个重复的空 VAO）、S16（各 Pass 自缓存尺寸）、N15（没有共享状态缓存）、N16（三个模糊着色器重复）、N17（编译失败仍返回 shader）。★ S14（调试自检默认开着、含 `glReadPixels`）**已修** |
 
-### 第四轮：Shader 资产格式 + 解析器（★ 最新）
+### 第四轮：Shader 资产格式 + 解析器
 
 | 项目 | 说明 |
 |---|---|
@@ -2096,6 +2258,27 @@ Pass "Base" { Vertex { 666666666; } }     // ← 纯占位
 | **格式示例** | `Core/ShaderParser/ShaderFormatTemplate/shaderAsset.glsl`（**结构示意，非可编译代码**） |
 | **CMake** | 新增 `ShaderParser.h/.cpp`，并把 `src/Core/ShaderParser` 加进 `target_include_directories` |
 | **新引入的问题** | N18（头文件里只有声明、没有定义的匿名 namespace）、N20（三个 build 入口重复）、N21（解析器静默失败）、N22（include 失败把 `#include` 塞进 GLSL）、N23（每次调用都重新解析）、N24（`Properties` 只是文本）。★ 其中 N19（`IShader` 依赖解析器头）**已修** |
+
+### 第五轮：Vulkan 后端骨架（★ 最新）
+
+**目标刻意压到最小**：用 Vulkan 画出**一个三角形**。不做顶点缓冲、不做 uniform、不做纹理 —— 把"Vulkan 怎么启动、怎么同步"这条骨架先立起来。
+
+| 项目 | 说明 |
+|---|---|
+| **新增依赖** | `dependencies/vulkan/`（Khronos 纯 C 头 + 用 `gendef`/`dlltool` 从**系统** `vulkan-1.dll` 造的 `libvulkan-1.a`）+ `dependencies/glslang/`（GLSL→SPIR-V）。**全程不需要安装 Vulkan SDK** |
+| **`VulkanRenderer.cpp`** | 约 1200 行：13 步初始化 → 每帧 `acquire → 录制 → 提交 → present` → 严格逆序清理 |
+| **`VulkanRenderer.h`** | 顶部**五段导读注释**：OpenGL→Vulkan 心智模型对照表 / 13 步依赖链 / 每帧时间线 / 接入清单 / 刻意不做的功能 |
+| **三角形成本** | 顶点数据写在顶点着色器里（`gl_VertexIndex` 索引），pipeline 的 vertex input 是**空的** → 不需要 vertex buffer / staging buffer / 内存类型选择 / descriptor set |
+| **同步** | 2 帧在飞 × 2 个信号量 + 2 个 fence。★ **OpenGL 里 `glfwSwapBuffers` 帮你做的那些事，这里必须自己做** —— 这是从 GL 过来最陡的一段 |
+| **CMake** | 接线三处（`.cpp` / include 路径 / 链接导入库）。★ **故意不用 `find_package(Vulkan)`**：它要找 `VULKAN_SDK` 环境变量，而本项目根本不装 SDK |
+| **`.gitignore`** | 例外区**放行 3 样**（`libvulkan-1.a` / `vulkan-1.def` / `glslang.exe`，约 5.5MB）；同时**显式排除 83MB 用不到的**（Vulkan-Hpp 的 `.hpp`、glslang 的 `lib/`、系统 DLL 副本） |
+| **`.spv` 提交进仓库** | 运行期只读文件、**不调 glslang** → clone 下来不用装编译工具就能跑。★ `ReadFileBytes` 会**校验 SPIR-V 魔数**并明确报错（忘了 `glslang -V` 时立刻看得出来） |
+| **实测** | ① GL 后端：加了 Vulkan 文件后**构建仍零警告、运行不变**；② 临时切到 `VULKAN_RENDERER`：跑出三角形，约 2 万帧无异常（`presentMode=MAILBOX` → ~2600fps） |
+| **`main.cpp`** | **零改动** —— 空实现的 `CreateShader`/`CreateMesh` + 空操作的 `Clear`/`SwapBuffers` + 在 `ExecuteRenderCommands` 里画三角形。**这是第一轮"把资源创建做成接口成员"的回报** |
+| **仍然没有** | `VulkanMesh` / `VulkanShader` / uniform / 纹理 / 吃渲染队列；**Pass 管线仍是 OpenGL 专属**（`OpenGLRenderContext` 存 `unsigned int` 句柄）；交换链格式变化未处理；无 validation layer |
+
+> **一句话**：这一轮证明的是"**接口这层已经足够抽象，能容纳第二个完全不同的图形 API**"，
+> 而不是"Vulkan 后端做完了"。真正的硬骨头是后面那条 —— 把 Pass 管线的抽象上移。
 
 ### 现在的架构一句话总结
 

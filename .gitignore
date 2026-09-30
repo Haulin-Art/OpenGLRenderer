@@ -86,3 +86,33 @@ Testing/
 #    → 对模型目录放行，否则 clone 下来缺模型、程序跑不起来
 #    以后新增模型目录时，在这里照抄一行即可
 !src/mesh/*.obj
+
+# 3) Vulkan 后端：随仓库分发的依赖（保证换台电脑 clone 下来就能直接编译）
+#    都是本地已经准备好了的，这里把它们从上面的 【*.a / *.exe】 规则里捞出来。
+#      libvulkan-1.a   —— 用 gendef + dlltool 从系统 vulkan-1.dll 造出来的 MinGW 导入库（链接必须）
+#      vulkan-1.def    —— 它的导出表；以后 loader 升级、要重造 .a 时只靠这个文件就够了
+#      glslang.exe     —— GLSL → SPIR-V 编译器，只有"改了 .vert/.frag 要重编"时才用得到
+#                          （它是静态链接的单文件 exe，bin/ 里没有 DLL，见下面的说明）
+#    ★ 头文件（dependencies/vulkan/include/**/*.h）本来就不被忽略，不用放行。
+!dependencies/vulkan/libvulkan-1.a
+!dependencies/vulkan/vulkan-1.def
+!dependencies/glslang/bin/glslang.exe
+
+# 4) 但上面那两个目录里【我们用不到】的部分就别进仓库了（能省 ~83MB）
+#    —— 这不是"能不能跑"的问题，纯粹是别把 90MB 二进制塞进 git。
+#
+# ★★ 注意：下面每一行都【不能】在行尾写注释！
+#    .gitignore 只认"整行以 # 开头"的注释 —— 行尾的 # 会被当成模式字符串的一部分，
+#    于是规则静默失效（这个坑当时就踩了一次：glslang/include/ 照样被 git add 进去了）。
+#    所以说明一律写在模式的【上一行】。
+#
+#    Vulkan-Hpp：C++ 绑定（vulkan.hpp / vulkan_structs.hpp ...），纯 C 写法用不到
+dependencies/vulkan/include/vulkan/*.hpp
+#    C++20 模块声明，同上
+dependencies/vulkan/include/vulkan/*.cppm
+#    系统 DLL 的副本：运行不需要（System32 里有），重造 .a 也只用 .def
+dependencies/vulkan/vulkan-1.dll
+#    把 glslang 当库嵌入时才需要的头
+dependencies/glslang/include/
+#    63MB 的静态/动态库；我们只调它的命令行 exe（静态链接，不依赖这些）
+dependencies/glslang/lib/

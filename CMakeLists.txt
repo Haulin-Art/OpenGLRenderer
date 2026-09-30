@@ -36,7 +36,9 @@ add_executable(OpenGLRenderer
     src/config.h
     src/Render/RendererFactory.h
     src/Render/RendererFactory.cpp
+    # ---- Render/Vulkan: 第二个后端（目前只画一个三角形，见第 4.5 节）----
     src/Render/Vulkan/VulkanRenderer.h
+    src/Render/Vulkan/VulkanRenderer.cpp
     src/Render/RenderQueue.h
     src/Render/RenderQueue.cpp
     src/Core/MatrixTools.h
@@ -85,8 +87,10 @@ target_include_directories(OpenGLRenderer PRIVATE
     ${CMAKE_SOURCE_DIR}/src/Render
     ${CMAKE_SOURCE_DIR}/src/Render/Camera
     ${CMAKE_SOURCE_DIR}/src/Render/OpenGL
+    ${CMAKE_SOURCE_DIR}/src/Render/Vulkan             # RendererFactory.h 要 include "VulkanRenderer.h"
     ${CMAKE_SOURCE_DIR}/src/Core
     ${CMAKE_SOURCE_DIR}/src/Core/ShaderParser
+    ${CMAKE_SOURCE_DIR}/dependencies/vulkan/include   # <vulkan/vulkan.h>
 )
 
 # ============================================
@@ -222,6 +226,32 @@ target_include_directories(tinyobjloader INTERFACE
 )
 
 # ============================================
-# 链接：将 GLAD、GLFW、GLM、tinyobjloader 链接到主程序
+# 第三方库 5: Vulkan — 只用到 loader（导入库随仓库分发）
+#
+# ★ 这里【故意不用】 find_package(Vulkan REQUIRED)：
+#   CMake 自带那个模块会去找 VULKAN_SDK 环境变量（要装官方 SDK 才有），
+#   这台机器上没装 → 直接 configure 失败。我们用的是另一条路：
+#
+#   1) 头文件：dependencies/vulkan/include/（Khronos 官方 Vulkan-Headers）
+#   2) 导入库：dependencies/vulkan/libvulkan-1.a
+#        用 w64devkit 自带的 gendef + dlltool 从【系统自带】的
+#        C:\Windows\System32\vulkan-1.dll 现场造出来的（Windows 10+ 都带这个 loader），
+#        重造命令见 README 第 1 节。
+#      → 所以不需要安装 Vulkan SDK，也不需要 .lib（MSVC 格式，MinGW 用不了）。
+#   3) 运行期：链接的是 vulkan-1.dll，照样从 System32 加载，不用随程序分发。
+#
+# ★ .spv 着色器：src/shaders/vulkan_triangle.{vert,frag}.spv 已经提交进仓库，
+#   运行期只读文件，不会调 glslang。只有改了 .vert/.frag 才需要重新编译（见 README 第 1 节）。
 # ============================================
-target_link_libraries(OpenGLRenderer PRIVATE glad glfw3 OpenGL::GL glm tinyobjloader)
+add_library(vulkan INTERFACE)
+target_include_directories(vulkan INTERFACE
+    ${CMAKE_SOURCE_DIR}/dependencies/vulkan/include
+)
+target_link_libraries(vulkan INTERFACE
+    ${CMAKE_SOURCE_DIR}/dependencies/vulkan/libvulkan-1.a
+)
+
+# ============================================
+# 链接：将 GLAD、GLFW、GLM、tinyobjloader、Vulkan 链接到主程序
+# ============================================
+target_link_libraries(OpenGLRenderer PRIVATE glad glfw3 OpenGL::GL glm tinyobjloader vulkan)
