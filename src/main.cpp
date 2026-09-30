@@ -78,7 +78,7 @@ int main(){
     // ======================================== 加载 OBJ 模型 ======================================================
     // 猴头模型
     ObjMeshData objMeshData;
-    const std::string objPath = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/monkey.obj";
+    const std::string objPath = std::string(PROJECT_SOURCE_DIR) + "/src/mesh/monkey_smooth.obj";
     if (!LoadObj(objPath, objMeshData)) {
         std::cerr << "加载 OBJ 失败: " << objPath << std::endl;
         renderer->WindowTerminate(); // 终止窗口
